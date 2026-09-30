@@ -1,0 +1,89 @@
+{
+    "title":  "十二籃",
+    "volumes":  [
+                    {
+                        "id":  "01",
+                        "number":  1,
+                        "title":  "第一輯",
+                        "file":  "volume01.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "02",
+                        "number":  2,
+                        "title":  "第二輯",
+                        "file":  "volume02.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "03",
+                        "number":  3,
+                        "title":  "第三輯",
+                        "file":  "volume03.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "04",
+                        "number":  4,
+                        "title":  "第四輯",
+                        "file":  "volume04.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "05",
+                        "number":  5,
+                        "title":  "第五輯",
+                        "file":  "volume05.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "06",
+                        "number":  6,
+                        "title":  "第六輯",
+                        "file":  "volume06.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "07",
+                        "number":  7,
+                        "title":  "第七輯",
+                        "file":  "volume07.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "08",
+                        "number":  8,
+                        "title":  "第八輯",
+                        "file":  "volume08.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "09",
+                        "number":  9,
+                        "title":  "第九輯",
+                        "file":  "volume09.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "10",
+                        "number":  10,
+                        "title":  "第十輯",
+                        "file":  "volume10.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "11",
+                        "number":  11,
+                        "title":  "第十一輯",
+                        "file":  "volume11.json",
+                        "articleCount":  12
+                    },
+                    {
+                        "id":  "12",
+                        "number":  12,
+                        "title":  "第十二輯",
+                        "file":  "volume12.json",
+                        "articleCount":  12
+                    }
+                ]
+}

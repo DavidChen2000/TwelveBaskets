@@ -1,0 +1,10 @@
+{
+  "name": "十二籃閱讀器",
+  "short_name": "十二籃",
+  "lang": "zh-Hant",
+  "start_url": "./#/home",
+  "display": "standalone",
+  "background_color": "#f5f2e9",
+  "theme_color": "#f5f2e9",
+  "icons": []
+}

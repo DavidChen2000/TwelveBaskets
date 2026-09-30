@@ -1,0 +1,197 @@
+const app = document.querySelector('#app');
+const storageKey = 'twelveBaskets_';
+const state = { books: null, volumes: new Map(), currentArticle: null };
+
+const readStored = (key, fallback) => {
+  try {
+    const value = localStorage.getItem(`${storageKey}${key}`);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeStored = (key, value) => localStorage.setItem(`${storageKey}${key}`, JSON.stringify(value));
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+const volumePath = (id) => `./data/volume${id}.json`;
+
+async function loadBooks() {
+  if (state.books) return state.books;
+  const response = await fetch('./data/books.json');
+  if (!response.ok) throw new Error('無法載入書目資料');
+  state.books = await response.json();
+  return state.books;
+}
+
+async function loadVolume(id) {
+  if (state.volumes.has(id)) return state.volumes.get(id);
+  const response = await fetch(volumePath(id));
+  if (!response.ok) return null;
+  const volume = await response.json();
+  state.volumes.set(id, volume);
+  return volume;
+}
+
+function updateChrome(route) {
+  document.querySelectorAll('[data-nav]').forEach((link) => {
+    const selected = link.dataset.nav === route;
+    if (selected) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
+  const bookmarks = readStored('bookmarks', []);
+  document.querySelector('#bookmark-count').textContent = bookmarks.length || '';
+}
+
+function renderHome() {
+  updateChrome('home');
+  const volumes = state.books.volumes;
+  const lastRead = readStored('lastRead', null);
+  const resume = lastRead ? state.books.volumes.find((volume) => volume.id === lastRead.volumeId) : null;
+  app.innerHTML = `
+    <section class="home-shell">
+      <div class="home-intro">
+        <div><p class="eyebrow">READING ROOM · 12 VOLUMES</p><h1>十二籃</h1><p class="lead">一輯一輯地讀，讓文字陪伴每天的安靜時刻。</p></div>
+        ${resume ? `<a class="resume-link" href="#/article/${encodeURIComponent(lastRead.articleId)}"><small>接續閱讀 · ${esc(resume.title)}</small><strong>${esc(lastRead.title)}　→</strong></a>` : ''}
+      </div>
+      <div class="section-heading"><h2>全書輯目</h2><span>共 ${volumes.length} 輯</span></div>
+      <div class="volume-grid">${volumes.map((volume, index) => `<a class="volume-card" style="--i:${index}" href="#/volume/${volume.id}"><span class="volume-number">VOLUME ${String(volume.number).padStart(2, '0')}</span><strong>${esc(volume.title)}</strong><span class="volume-meta">${volume.articleCount ? `${volume.articleCount} 篇` : '開啟輯目'} <span aria-hidden="true">↗</span></span></a>`).join('')}</div>
+    </section>`;
+}
+
+async function renderVolume(id) {
+  const volume = await loadVolume(id);
+  if (!volume) {
+    renderNotReady('這一輯的篇目正在整理，請稍後再來。');
+    return;
+  }
+  updateChrome('home');
+  app.innerHTML = `<section class="view-shell"><a class="back-link" href="#/home">←　回到全書輯目</a><p class="eyebrow" style="margin-top:34px">VOLUME ${volume.id}</p><h1 class="view-title">${esc(volume.title)}</h1><p class="view-subtitle">${volume.articles.length} 篇文章</p><div class="article-list">${volume.articles.map((article) => `<a class="article-row" href="#/article/${encodeURIComponent(article.id)}"><span class="article-index">${String(article.number).padStart(2, '0')}</span><span class="article-title">${esc(article.title)}</span><span class="article-arrow" aria-hidden="true">↗</span></a>`).join('')}</div></section>`;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function findArticle(articleId) {
+  await loadBooks();
+  for (const entry of state.books.volumes) {
+    const volume = await loadVolume(entry.id);
+    const article = volume?.articles.find((item) => item.id === articleId);
+    if (article) return { volume, article };
+  }
+  return null;
+}
+
+function rememberRead(volume, article) {
+  writeStored('lastRead', { volumeId: volume.id, articleId: article.id, title: article.title });
+}
+
+async function renderArticle(id) {
+  const found = await findArticle(id);
+  if (!found) {
+    renderNotReady('找不到這篇文章。');
+    return;
+  }
+  const { volume, article } = found;
+  const index = volume.articles.findIndex((item) => item.id === article.id);
+  const previous = volume.articles[index - 1];
+  const next = volume.articles[index + 1];
+  const bookmarks = readStored('bookmarks', []);
+  const bookmarked = bookmarks.includes(article.id);
+  state.currentArticle = { volume, article };
+  rememberRead(volume, article);
+  updateChrome('home');
+  const paragraphs = article.paragraphs.map((paragraph) => `<p>${esc(paragraph)}</p>`).join('');
+  app.innerHTML = `<article class="reader-shell">
+    <div class="reader-tools"><a class="back-link" href="#/volume/${volume.id}">←　${esc(volume.title)}篇目</a><div class="reader-actions">
+      <button id="bookmark-toggle" type="button" aria-pressed="${bookmarked}" aria-label="${bookmarked ? '移除書籤' : '加入書籤'}" title="${bookmarked ? '移除書籤' : '加入書籤'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.8c0-.9.7-1.6 1.6-1.6h8.8c.9 0 1.6.7 1.6 1.6V21l-6-3.8L6 21V4.8Z"/></svg></button>
+      <button id="font-down" type="button" aria-label="縮小字體" title="縮小字體">A−</button><button id="font-up" type="button" aria-label="放大字體" title="放大字體">A+</button>
+    </div></div>
+    <header class="article-header"><p class="eyebrow">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</p><h1>${esc(article.title)}</h1>${article.subtitle ? `<p class="article-subtitle">${esc(article.subtitle)}</p>` : ''}</header>
+    ${article.scripture ? `<p class="scripture">讀經：${esc(article.scripture)}</p>` : ''}
+    <div class="article-body">${paragraphs}</div>
+    <nav class="reader-pager" aria-label="文章導覽">${previous ? `<a class="pager-link" href="#/article/${encodeURIComponent(previous.id)}"><span>上一篇</span><strong>← ${esc(previous.title)}</strong></a>` : '<span></span>'}<a class="pager-home" href="#/volume/${volume.id}" aria-label="回到${esc(volume.title)}篇目" title="回到${esc(volume.title)}篇目"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5.5 9v11h13V9M9 20v-6h6v6"/></svg></a>${next ? `<a class="pager-link pager-link-next" href="#/article/${encodeURIComponent(next.id)}"><span>下一篇</span><strong>${esc(next.title)} →</strong></a>` : '<span></span>'}</nav>
+  </article>`;
+  const readerFloat = document.createElement('nav');
+  readerFloat.className = 'reader-float';
+  readerFloat.setAttribute('aria-label', '閱讀頁快速導覽');
+  readerFloat.innerHTML = `<button class="reader-float-button" type="button" data-scroll="top" aria-label="移至頁面頂端" title="移至頁面頂端">↑</button><button class="reader-float-button" type="button" data-scroll="bottom" aria-label="移至頁面底端" title="移至頁面底端">↓</button>`;
+  document.querySelector('.reader-shell').append(readerFloat);
+  readerFloat.querySelector('[data-scroll="top"]').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  readerFloat.querySelector('[data-scroll="bottom"]').addEventListener('click', () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
+  document.querySelector('#bookmark-toggle').addEventListener('click', toggleBookmark);
+  document.querySelector('#font-down').addEventListener('click', () => adjustFont(-1));
+  document.querySelector('#font-up').addEventListener('click', () => adjustFont(1));
+  applyFontSize();
+}
+
+function toggleBookmark() {
+  const button = document.querySelector('#bookmark-toggle');
+  const bookmarks = readStored('bookmarks', []);
+  const id = state.currentArticle.article.id;
+  const updated = bookmarks.includes(id) ? bookmarks.filter((item) => item !== id) : [...bookmarks, id];
+  writeStored('bookmarks', updated);
+  button.setAttribute('aria-pressed', String(updated.includes(id)));
+  button.setAttribute('aria-label', updated.includes(id) ? '移除書籤' : '加入書籤');
+  button.title = updated.includes(id) ? '移除書籤' : '加入書籤';
+  updateChrome('home');
+}
+
+function adjustFont(direction) {
+  const sizes = ['15px', '16px', '17px', '18px', '20px', '22px'];
+  const current = readStored('settings', { fontSize: '17px' }).fontSize;
+  const index = Math.max(0, sizes.indexOf(current));
+  const next = sizes[Math.max(0, Math.min(sizes.length - 1, index + direction))];
+  const settings = readStored('settings', { fontSize: '17px' });
+  settings.fontSize = next;
+  writeStored('settings', settings);
+  applyFontSize();
+}
+
+function applyFontSize() {
+  const settings = readStored('settings', { fontSize: '17px' });
+  const body = document.querySelector('.article-body');
+  if (body) body.style.fontSize = settings.fontSize;
+}
+
+async function renderBookmarks() {
+  updateChrome('bookmarks');
+  const ids = readStored('bookmarks', []);
+  const items = [];
+  for (const id of ids) {
+    const found = await findArticle(id);
+    if (found) items.push(found);
+  }
+  app.innerHTML = `<section class="view-shell"><a class="back-link" href="#/home">←　回到全書輯目</a><p class="eyebrow" style="margin-top:34px">YOUR MARKS</p><h1 class="view-title">書籤</h1>${items.length ? `<div class="article-list">${items.map(({ volume, article }) => `<a class="article-row" href="#/article/${encodeURIComponent(article.id)}"><span class="article-index">${volume.id}</span><span class="article-title">${esc(article.title)}</span><span class="article-arrow" aria-hidden="true">↗</span></a>`).join('')}</div>` : '<p class="empty-state">尚未收藏文章。閱讀時按下書籤圖示，即可在這裡找到它。</p>'}</section>`;
+}
+
+function renderNotReady(message) {
+  updateChrome('home');
+  app.innerHTML = `<section class="view-shell"><a class="back-link" href="#/home">←　回到全書輯目</a><p class="empty-state">${esc(message)}</p></section>`;
+}
+
+async function route() {
+  const [, routeName, id] = location.hash.match(/^#\/(\w+)(?:\/([^/?#]+))?/) || [];
+  try {
+    await loadBooks();
+    if (!routeName || routeName === 'home') renderHome();
+    else if (routeName === 'volume') await renderVolume(decodeURIComponent(id || ''));
+    else if (routeName === 'article') await renderArticle(decodeURIComponent(id || ''));
+    else if (routeName === 'bookmarks') await renderBookmarks();
+    else renderNotReady('此頁面尚未開放。');
+    app.focus({ preventScroll: true });
+  } catch (error) {
+    app.innerHTML = `<section class="view-shell"><p class="empty-state">${esc(error.message)}。請確認使用本機伺服器開啟閱讀器。</p></section>`;
+  }
+}
+
+document.querySelector('#theme-toggle').addEventListener('click', () => {
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  writeStored('settings', { ...readStored('settings', {}), theme });
+});
+const savedTheme = readStored('settings', {}).theme;
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+window.addEventListener('hashchange', route);
+route();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}));
+}
