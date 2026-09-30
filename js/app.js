@@ -89,7 +89,7 @@ function revealReaderFloat() {
   if (!controls) return;
   controls.classList.add('is-visible');
   window.clearTimeout(readerFloatTimer);
-  readerFloatTimer = window.setTimeout(() => controls.classList.remove('is-visible'), 1000);
+  readerFloatTimer = window.setTimeout(() => controls.classList.remove('is-visible'), 500);
 }
 
 async function renderArticle(id) {
