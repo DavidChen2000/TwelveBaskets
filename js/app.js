@@ -413,6 +413,45 @@ window.addEventListener('hashchange', route);
 window.addEventListener('scroll', revealReaderFloat, { passive: true });
 route();
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}));
+function registerServiceWorkerUpdates() {
+  if (!('serviceWorker' in navigator)) return;
+
+  const banner = document.querySelector('#update-banner');
+  const applyButton = document.querySelector('#update-apply');
+  const dismissButton = document.querySelector('#update-dismiss');
+  let waitingWorker = null;
+  let hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+
+  const showUpdate = (worker) => {
+    waitingWorker = worker;
+    banner.hidden = false;
+  };
+
+  applyButton.addEventListener('click', () => waitingWorker?.postMessage({ type: 'SKIP_WAITING' }));
+  dismissButton.addEventListener('click', () => { banner.hidden = true; });
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) {
+      hadController = true;
+      return;
+    }
+    if (reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
+
+  navigator.serviceWorker.register('./service-worker.js').then((registration) => {
+    if (registration.waiting && navigator.serviceWorker.controller) showUpdate(registration.waiting);
+
+    registration.addEventListener('updatefound', () => {
+      const installingWorker = registration.installing;
+      installingWorker?.addEventListener('statechange', () => {
+        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdate(installingWorker);
+        }
+      });
+    });
+  }).catch(() => {});
 }
+
+window.addEventListener('load', registerServiceWorkerUpdates, { once: true });

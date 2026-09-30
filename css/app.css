@@ -132,6 +132,14 @@ h1, h2, h3, p { margin-top: 0; }
 .loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 65vh; color: var(--muted); font: 16px var(--kai-font); }
 .loading span { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); animation: pulse 1s infinite alternate; }
 .site-footer { min-height: 50px; display: flex; justify-content: space-between; align-items: center; padding: 0 clamp(20px, 6vw, 88px); color: var(--muted); border-top: 1px solid var(--line); font-size: 12px; }
+.update-banner { position: fixed; z-index: 30; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); width: min(520px, calc(100% - 32px)); display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; transform: translateX(-50%); color: var(--ink); background: var(--surface); border: 1px solid var(--line); box-shadow: 0 8px 28px rgb(32 39 32 / 18%); }
+.update-banner[hidden] { display: none; }
+.update-banner p { margin: 0; font-size: 15px; }
+.update-banner-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+.update-banner-actions button { min-height: 40px; padding: 0 13px; border: 1px solid var(--line); border-radius: 3px; cursor: pointer; font: inherit; }
+.update-apply { color: var(--paper); background: var(--green); border-color: var(--green) !important; }
+.update-dismiss { color: var(--ink); background: transparent; }
+.update-banner-actions button:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
 @keyframes reveal { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulse { to { opacity: .25; transform: scale(.7); } }
 @media (prefers-reduced-motion: reduce) { .reader-float { transition-duration: .01ms; } }
@@ -168,4 +176,7 @@ h1, h2, h3, p { margin-top: 0; }
   .reader-tools { align-items: flex-start; }
   .reader-actions { gap: 5px; }
   .reader-actions button { min-width: 34px; height: 36px; padding-inline: 8px; }
+  .update-banner { align-items: flex-start; flex-direction: column; }
+  .update-banner-actions { width: 100%; }
+  .update-banner-actions button { flex: 1; }
 }
