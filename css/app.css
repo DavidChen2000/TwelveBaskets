@@ -121,7 +121,7 @@ h1, h2, h3, p { margin-top: 0; }
 .pager-home svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .reader-float { position: fixed; z-index: 10; top: 50%; right: max(12px, calc((100vw - var(--reader-width)) / 2 - 58px)); display: flex; flex-direction: column; gap: 8px; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(-50%); transition: opacity .25s ease, visibility 0s linear .25s; }
 .reader-float.is-visible, .reader-float:focus-within { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
-.reader-float-button { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 50%; box-shadow: 0 2px 8px rgb(32 39 32 / 10%); cursor: pointer; font: 600 20px/1 'DM Sans', sans-serif; transition: color .15s ease, border-color .15s ease, transform .15s ease; }
+.reader-float-button { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 50%; box-shadow: 0 2px 8px rgb(32 39 32 / 10%); cursor: pointer; font: 600 20px/1 'DM Sans', sans-serif; transition: color .15s ease, border-color .15s ease, transform .15s ease; }
 .reader-float-button:hover { color: var(--green); border-color: var(--green); transform: translateY(-1px); }
 .reader-float-button:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
 .reader-float-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -136,9 +136,9 @@ h1, h2, h3, p { margin-top: 0; }
 @media (max-width: 760px) {
   .topbar { height: 62px; gap: 22px; padding: 0 18px; }
   .topnav { gap: 18px; }
-  .wordmark { font-size: 20px; }
-  .topnav a { font-size: 16px; }
-  .nav-count { font-size: 13px; }
+  .wordmark { font-size: 23px; }
+  .topnav a { font-size: 18px; }
+  .nav-count { font-size: 14px; }
   .home-shell { padding: 42px 20px 60px; }
   .home-intro { grid-template-columns: 1fr; gap: 24px; padding-bottom: 26px; }
   .home-intro h1 { font-size: 44px; }
@@ -159,9 +159,9 @@ h1, h2, h3, p { margin-top: 0; }
 }
 @media (max-width: 400px) {
   .topbar { gap: 15px; }
-  .wordmark { gap: 7px; font-size: 18px; }
+  .wordmark { gap: 7px; font-size: 21px; }
   .topnav { gap: 12px; }
-  .topnav a { font-size: 15px; }
+  .topnav a { font-size: 17px; }
   .reader-tools { align-items: flex-start; }
   .reader-actions { gap: 5px; }
   .reader-actions button { min-width: 34px; height: 36px; padding-inline: 8px; }
