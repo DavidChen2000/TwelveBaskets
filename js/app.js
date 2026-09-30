@@ -51,7 +51,7 @@ function renderHome() {
   app.innerHTML = `
     <section class="home-shell">
       <div class="home-intro">
-        <div><p class="eyebrow">READING ROOM · 12 VOLUMES</p><h1>十二籃</h1><p class="lead">一輯一輯地讀，讓文字陪伴每天的安靜時刻。</p></div>
+        <div><p class="eyebrow">READING ROOM · 12 VOLUMES</p><h1>十二籃</h1><p class="lead">一輯一輯地讀，讓神的話陪伴每天的靈修時刻。</p></div>
         ${resume ? `<a class="resume-link" href="#/article/${encodeURIComponent(lastRead.articleId)}"><small>接續閱讀 · ${esc(resume.title)}</small><strong>${esc(lastRead.title)}　→</strong></a>` : ''}
       </div>
       <div class="section-heading"><h2>全書輯目</h2><span>共 ${volumes.length} 輯</span></div>
@@ -145,17 +145,17 @@ function toggleBookmark() {
 
 function adjustFont(direction) {
   const sizes = ['15px', '16px', '17px', '18px', '20px', '22px'];
-  const current = readStored('settings', { fontSize: '17px' }).fontSize;
+  const current = readStored('settings', { fontSize: '18px' }).fontSize;
   const index = Math.max(0, sizes.indexOf(current));
   const next = sizes[Math.max(0, Math.min(sizes.length - 1, index + direction))];
-  const settings = readStored('settings', { fontSize: '17px' });
+  const settings = readStored('settings', { fontSize: '18px' });
   settings.fontSize = next;
   writeStored('settings', settings);
   applyFontSize();
 }
 
 function applyFontSize() {
-  const settings = readStored('settings', { fontSize: '17px' });
+  const settings = readStored('settings', { fontSize: '18px' });
   const body = document.querySelector('.article-body');
   if (body) body.style.fontSize = settings.fontSize;
 }
