@@ -1,5 +1,6 @@
-const CACHE_NAME = 'twelve-baskets-v12';
+const CACHE_VERSION = 'v12';
 const CACHE_PREFIX = 'twelve-baskets-';
+const CACHE_NAME = CACHE_VERSION + CACHE_PREFIX;
 const APP_SHELL = ['./', './index.html', './manifest.json', './css/app.css', './js/app.js', './icons/icon-192.png', './icons/icon-512.png', './data/books.json', './data/volume01.json'];
 
 self.addEventListener('install', (event) => {
