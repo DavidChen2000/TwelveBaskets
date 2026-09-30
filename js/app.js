@@ -144,7 +144,7 @@ function toggleBookmark() {
 }
 
 function adjustFont(direction) {
-  const sizes = ['15px', '16px', '17px', '18px', '20px', '22px'];
+  const sizes = ['15px', '16px', '17px', '18px', '20px', '22px', '24px'];
   const current = readStored('settings', { fontSize: '18px' }).fontSize;
   const index = Math.max(0, sizes.indexOf(current));
   const next = sizes[Math.max(0, Math.min(sizes.length - 1, index + direction))];

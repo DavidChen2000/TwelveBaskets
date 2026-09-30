@@ -136,6 +136,9 @@ h1, h2, h3, p { margin-top: 0; }
 @media (max-width: 760px) {
   .topbar { height: 62px; gap: 22px; padding: 0 18px; }
   .topnav { gap: 18px; }
+  .wordmark { font-size: 20px; }
+  .topnav a { font-size: 16px; }
+  .nav-count { font-size: 13px; }
   .home-shell { padding: 42px 20px 60px; }
   .home-intro { grid-template-columns: 1fr; gap: 24px; padding-bottom: 26px; }
   .home-intro h1 { font-size: 44px; }
@@ -154,11 +157,11 @@ h1, h2, h3, p { margin-top: 0; }
   .article-body { font-size: 16px; line-height: 2; }
   .reader-actions button { min-width: 38px; padding-inline: 10px; }
 }
-@media (max-width: 390px) {
+@media (max-width: 400px) {
   .topbar { gap: 15px; }
-  .wordmark { gap: 7px; font-size: 16px; }
+  .wordmark { gap: 7px; font-size: 18px; }
   .topnav { gap: 12px; }
-  .topnav a { font-size: 14px; }
+  .topnav a { font-size: 15px; }
   .reader-tools { align-items: flex-start; }
   .reader-actions { gap: 5px; }
   .reader-actions button { min-width: 34px; height: 36px; padding-inline: 8px; }
