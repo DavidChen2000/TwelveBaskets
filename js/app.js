@@ -1,6 +1,6 @@
 const app = document.querySelector('#app');
 const storageKey = 'twelveBaskets_';
-const state = { books: null, volumes: new Map(), currentArticle: null };
+const state = { books: null, volumes: new Map(), currentArticle: null, pendingBookmarkImport: null };
 let readerFloatTimer;
 
 const readStored = (key, fallback) => {
@@ -160,6 +160,42 @@ function applyFontSize() {
   if (body) body.style.fontSize = settings.fontSize;
 }
 
+async function exportBookmarks() {
+  const bookmarks = readStored('bookmarks', []);
+  const date = new Date().toISOString().slice(0, 10);
+  const file = new File([JSON.stringify({
+    app: 'twelve-baskets',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    bookmarks: Array.isArray(bookmarks) ? bookmarks : [],
+  }, null, 2)], `twelve-baskets-bookmarks-${date}.json`, { type: 'application/json' });
+
+  if (navigator.share && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: '十二籃書籤' });
+      return;
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+    }
+  }
+
+  const url = URL.createObjectURL(file);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = file.name;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
 async function renderBookmarks() {
   updateChrome('bookmarks');
   const ids = readStored('bookmarks', []);
@@ -168,7 +204,76 @@ async function renderBookmarks() {
     const found = await findArticle(id);
     if (found) items.push(found);
   }
-  app.innerHTML = `<section class="view-shell"><a class="back-link" href="#/home">←　回到全書輯目</a><p class="eyebrow" style="margin-top:34px">YOUR MARKS</p><h1 class="view-title">書籤</h1>${items.length ? `<div class="article-list">${items.map(({ volume, article }) => `<a class="article-row" href="#/article/${encodeURIComponent(article.id)}"><span class="article-index">${volume.id}</span><span class="article-title">${esc(article.title)}</span><span class="article-arrow" aria-hidden="true">↗</span></a>`).join('')}</div>` : '<p class="empty-state">尚未收藏文章。閱讀時按下書籤圖示，即可在這裡找到它。</p>'}</section>`;
+  app.innerHTML = `<section class="view-shell"><a class="back-link" href="#/home">←　回到全書輯目</a><p class="eyebrow" style="margin-top:34px">YOUR MARKS</p><h1 class="view-title">書籤</h1><div class="bookmark-tools"><button class="bookmark-action" id="bookmark-export" type="button">匯出書籤</button><button class="bookmark-action" id="bookmark-import-trigger" type="button">匯入書籤</button><input class="bookmark-file-input" id="bookmark-import-file" type="file" accept=".json,application/json" aria-label="選擇書籤備份檔"><span id="bookmark-feedback" class="bookmark-feedback" role="status" aria-live="polite"></span></div>${items.length ? `<div class="article-list">${items.map(({ volume, article }) => `<div class="article-row bookmark-row"><a class="bookmark-entry" href="#/article/${encodeURIComponent(article.id)}"><span class="article-index">${volume.id}</span><span class="article-title">${esc(article.title)}</span></a><button class="bookmark-delete" type="button" data-bookmark-id="${esc(article.id)}" data-bookmark-title="${esc(article.title)}" aria-label="刪除「${esc(article.title)}」書籤" title="刪除書籤"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 14h11l1-14M9 7V4h6v3"/></svg></button></div>`).join('')}</div>` : '<p class="empty-state">尚未收藏文章。閱讀時按下書籤圖示，即可在這裡找到它。</p>'}<dialog class="bookmark-dialog" id="bookmark-delete-dialog" aria-labelledby="bookmark-delete-title"><h2 id="bookmark-delete-title">確認刪除書籤</h2><p id="bookmark-delete-message"></p><div class="bookmark-dialog-actions"><button class="bookmark-action" id="bookmark-delete-cancel" type="button">取消</button><button class="bookmark-action bookmark-action-danger" id="bookmark-delete-confirm" type="button">確認</button></div></dialog><dialog class="bookmark-dialog" id="bookmark-import-dialog" aria-labelledby="bookmark-import-title"><h2 id="bookmark-import-title">匯入書籤</h2><p id="bookmark-import-status">已檢查備份內容，請選擇匯入方式。</p><div class="bookmark-dialog-actions"><button class="bookmark-action" id="bookmark-import-cancel" type="button">取消</button><button class="bookmark-action" data-import-mode="merge" type="button">合併書籤</button><button class="bookmark-action bookmark-action-primary" data-import-mode="replace" type="button">取代現有書籤</button></div></dialog></section>`;
+
+  const fileInput = document.querySelector('#bookmark-import-file');
+  const feedback = document.querySelector('#bookmark-feedback');
+  const dialog = document.querySelector('#bookmark-import-dialog');
+  const deleteDialog = document.querySelector('#bookmark-delete-dialog');
+  let pendingDeleteId = null;
+  document.querySelectorAll('.bookmark-delete').forEach((button) => {
+    button.addEventListener('click', () => {
+      pendingDeleteId = button.dataset.bookmarkId;
+      document.querySelector('#bookmark-delete-message').textContent = `確定要刪除「${button.dataset.bookmarkTitle}」嗎？`;
+      deleteDialog.showModal();
+    });
+  });
+  document.querySelector('#bookmark-delete-cancel').addEventListener('click', () => deleteDialog.close());
+  deleteDialog.addEventListener('close', () => { pendingDeleteId = null; });
+  document.querySelector('#bookmark-delete-confirm').addEventListener('click', async () => {
+    if (!pendingDeleteId) return;
+    const bookmarks = readStored('bookmarks', []);
+    writeStored('bookmarks', bookmarks.filter((id) => id !== pendingDeleteId));
+    deleteDialog.close();
+    await renderBookmarks();
+    document.querySelector('#bookmark-feedback').textContent = '書籤已刪除。';
+  });
+  document.querySelector('#bookmark-export').addEventListener('click', async () => {
+    try {
+      await exportBookmarks();
+      feedback.textContent = '書籤備份已準備完成。';
+    } catch {
+      feedback.textContent = '匯出失敗，請稍後再試。';
+    }
+  });
+  document.querySelector('#bookmark-import-trigger').addEventListener('click', () => fileInput.click());
+  document.querySelector('#bookmark-import-cancel').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => { state.pendingBookmarkImport = null; });
+  fileInput.addEventListener('change', async () => {
+    const [file] = fileInput.files;
+    fileInput.value = '';
+    if (!file) return;
+
+    try {
+      const data = JSON.parse(await readFileAsText(file));
+      if (data?.app !== 'twelve-baskets' || data.version !== 1 || !Array.isArray(data.bookmarks)) {
+        throw new Error('檔案格式不符，請選擇十二籃匯出的 JSON 備份。');
+      }
+      const importedIds = [...new Set(data.bookmarks.filter((id) => typeof id === 'string'))];
+      const volumes = await Promise.all(state.books.volumes.map(({ id }) => loadVolume(id)));
+      const validIds = new Set(volumes.flatMap((volume) => volume?.articles.map(({ id }) => id) || []));
+      const bookmarks = importedIds.filter((id) => validIds.has(id));
+      state.pendingBookmarkImport = { bookmarks, skipped: data.bookmarks.length - bookmarks.length };
+      document.querySelector('#bookmark-import-status').textContent = `找到 ${bookmarks.length} 筆有效書籤，${state.pendingBookmarkImport.skipped} 筆無法辨識。請選擇匯入方式。`;
+      dialog.querySelectorAll('[data-import-mode]').forEach((button) => { button.disabled = bookmarks.length === 0; });
+      dialog.showModal();
+    } catch (error) {
+      feedback.textContent = error.message || '無法讀取備份檔。';
+    }
+  });
+  dialog.querySelectorAll('[data-import-mode]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const { bookmarks, skipped } = state.pendingBookmarkImport;
+      const mode = button.dataset.importMode;
+      const current = readStored('bookmarks', []);
+      const updated = mode === 'replace' ? bookmarks : [...new Set([...current, ...bookmarks])];
+      const added = updated.length - (mode === 'replace' ? 0 : current.length);
+      writeStored('bookmarks', updated);
+      dialog.close();
+      await renderBookmarks();
+      document.querySelector('#bookmark-feedback').textContent = `已${mode === 'replace' ? '取代' : '合併'}書籤，新增 ${added} 筆，略過 ${skipped} 筆。`;
+    });
+  });
 }
 
 function renderNotReady(message) {

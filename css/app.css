@@ -66,15 +66,36 @@ h1, h2, h3, p { margin-top: 0; }
 .volume-card strong { font: 500 19px 'Noto Serif TC', serif; }
 .volume-card .volume-meta { color: var(--muted); font-size: 15px; }
 .view-shell { max-width: 1120px; margin: auto; padding: 34px 28px 80px; }
-.back-link { color: var(--muted); font-size: 14px; }
+.back-link { color: var(--muted); font-size: 18px; }
 .view-title { margin: 30px 0 10px; font: 500 38px 'Noto Serif TC', serif; }
 .view-subtitle { color: var(--muted); font-size: 17px; }
 .article-list { margin-top: 34px; border-top: 1px solid var(--line); }
 .article-row { min-height: 84px; display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); }
 .article-row:hover .article-title { color: var(--green); }
+.bookmark-row { grid-template-columns: minmax(0, 1fr) 44px; }
+.bookmark-entry { min-width: 0; min-height: 82px; display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 12px; }
+.bookmark-delete { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 10px; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 50%; cursor: pointer; }
+.bookmark-delete:hover { color: var(--coral); background: var(--surface); border-color: var(--line); }
+.bookmark-delete:focus-visible { outline: 2px solid var(--coral); outline-offset: 2px; }
+.bookmark-delete svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .article-index { color: var(--coral); font-size: 15px; font-variant-numeric: tabular-nums; }
 .article-title { font: 500 19px 'Noto Serif TC', serif; transition: color .15s ease; }
 .article-arrow { color: var(--muted); font-size: 18px; }
+.bookmark-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 24px; }
+.bookmark-action { min-height: 42px; padding: 0 15px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 3px; cursor: pointer; font: inherit; }
+.bookmark-action:hover { border-color: var(--green); color: var(--green); }
+.bookmark-action:disabled { opacity: .5; cursor: not-allowed; }
+.bookmark-action-primary { color: var(--paper); background: var(--green); border-color: var(--green); }
+.bookmark-action-primary:hover { color: var(--paper); background: var(--green-dark); }
+.bookmark-action-danger { color: #fff; background: var(--coral); border-color: var(--coral); }
+.bookmark-action-danger:hover { color: #fff; background: #a74f39; border-color: #a74f39; }
+.bookmark-file-input { display: none; }
+.bookmark-feedback { flex-basis: 100%; color: var(--muted); font-size: 14px; }
+.bookmark-dialog { width: min(460px, calc(100vw - 32px)); padding: 24px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 4px; }
+.bookmark-dialog::backdrop { background: rgb(18 24 20 / 48%); }
+.bookmark-dialog h2 { margin-bottom: 10px; font-size: 22px; }
+.bookmark-dialog p { color: var(--muted); line-height: 1.7; }
+.bookmark-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .reader-shell { max-width: var(--reader-width); margin: auto; padding: 32px 26px 88px; }
 .reader-tools { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .reader-tools .back-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -82,6 +103,7 @@ h1, h2, h3, p { margin-top: 0; }
 .reader-actions button { min-width: 40px; height: 38px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 3px; cursor: pointer; }
 .reader-actions button[aria-pressed='true'] { color: var(--coral); border-color: var(--coral); }
 .reader-actions svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.reader-actions button[aria-pressed='true'] svg { fill: currentColor; }
 .article-header { padding: 48px 0 30px; text-align: center; }
 .article-header .eyebrow { margin-bottom: 16px; }
 .article-header h1 { margin: 0 auto 17px; font: 600 34px/1.5 var(--kai-font); }
@@ -121,6 +143,9 @@ h1, h2, h3, p { margin-top: 0; }
   .volume-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .volume-card { min-height: 120px; padding: 15px; }
   .view-shell { padding: 26px 20px 64px; }
+  .bookmark-dialog { padding: 20px; }
+  .bookmark-dialog-actions { justify-content: stretch; }
+  .bookmark-dialog-actions button { flex: 1 1 auto; }
   .reader-shell { padding: 22px 21px 64px; }
   .reader-float { right: 10px; gap: 7px; }
   .reader-float-button { width: 38px; height: 38px; }
