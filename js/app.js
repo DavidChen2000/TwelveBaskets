@@ -2,6 +2,7 @@ const app = document.querySelector('#app');
 const storageKey = 'twelveBaskets_';
 const state = { books: null, volumes: new Map(), currentArticle: null, pendingBookmarkImport: null };
 let readerFloatTimer;
+let speechSession = { token: 0, chunks: [], index: 0, status: 'idle' };
 
 const readStored = (key, fallback) => {
   try {
@@ -84,6 +85,104 @@ function rememberRead(volume, article) {
   writeStored('lastRead', { volumeId: volume.id, articleId: article.id, title: article.title });
 }
 
+function updateSpeechButton(label) {
+  const button = document.querySelector('#speech-toggle');
+  if (!button) return;
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.setAttribute('aria-pressed', String(speechSession.status === 'speaking'));
+}
+
+function stopArticleSpeech() {
+  speechSession.token += 1;
+  speechSession.chunks = [];
+  speechSession.index = 0;
+  speechSession.status = 'idle';
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  document.querySelectorAll('.article-body [data-speech-active]').forEach((paragraph) => paragraph.removeAttribute('data-speech-active'));
+  updateSpeechButton('開始朗讀');
+}
+
+function toggleArticleSpeech() {
+  if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+    document.querySelector('#speech-status').textContent = '此瀏覽器不支援語音朗讀。';
+    return;
+  }
+
+  if (speechSession.status === 'speaking') {
+    window.speechSynthesis.pause();
+    speechSession.status = 'paused';
+    updateSpeechButton('繼續朗讀');
+    return;
+  }
+
+  if (speechSession.status === 'paused') {
+    window.speechSynthesis.resume();
+    speechSession.status = 'speaking';
+    updateSpeechButton('暫停朗讀');
+    return;
+  }
+
+  startArticleSpeech(0);
+}
+
+function startArticleSpeech(paragraphIndex) {
+  if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+    document.querySelector('#speech-status').textContent = '此瀏覽器不支援語音朗讀。';
+    return;
+  }
+
+  const chunks = state.currentArticle.article.paragraphs
+    .map((text, index) => ({ text, index }))
+    .filter(({ text }) => text.trim());
+  const startIndex = chunks.findIndex(({ index }) => index >= paragraphIndex);
+  if (startIndex < 0) return;
+  speechSession = { token: speechSession.token + 1, chunks, index: startIndex, status: 'speaking' };
+  window.speechSynthesis.cancel();
+  const token = speechSession.token;
+  document.querySelector('#speech-status').textContent = `正在從第 ${paragraphIndex + 1} 段開始朗讀。`;
+  updateSpeechButton('暫停朗讀');
+  speakNextChunk(token);
+}
+
+function setActiveSpeechParagraph(index) {
+  document.querySelectorAll('.article-body [data-speech-active]').forEach((paragraph) => paragraph.removeAttribute('data-speech-active'));
+  document.querySelector(`.article-body [data-speech-index="${index}"]`)?.setAttribute('data-speech-active', 'true');
+}
+
+function speakNextChunk(token) {
+  if (token !== speechSession.token || speechSession.status !== 'speaking') return;
+  if (speechSession.index >= speechSession.chunks.length) {
+    speechSession.status = 'idle';
+    setActiveSpeechParagraph(-1);
+    updateSpeechButton('開始朗讀');
+    document.querySelector('#speech-status').textContent = '朗讀完成。';
+    return;
+  }
+
+  const chunk = speechSession.chunks[speechSession.index];
+  setActiveSpeechParagraph(chunk.index);
+  const utterance = new SpeechSynthesisUtterance(chunk.text);
+  utterance.lang = 'zh-TW';
+  const voices = window.speechSynthesis.getVoices();
+  utterance.voice = voices.find((voice) => voice.lang.toLowerCase() === 'zh-tw')
+    || voices.find((voice) => voice.lang.toLowerCase().startsWith('zh'))
+    || null;
+  utterance.onend = () => {
+    if (token !== speechSession.token) return;
+    speechSession.index += 1;
+    speakNextChunk(token);
+  };
+  utterance.onerror = (event) => {
+    if (token !== speechSession.token || event.error === 'canceled' || event.error === 'interrupted') return;
+    speechSession.status = 'idle';
+    setActiveSpeechParagraph(-1);
+    updateSpeechButton('開始朗讀');
+    document.querySelector('#speech-status').textContent = '朗讀發生問題，請再試一次。';
+  };
+  window.speechSynthesis.speak(utterance);
+}
+
 function revealReaderFloat() {
   const controls = document.querySelector('.reader-float');
   if (!controls) return;
@@ -107,14 +206,16 @@ async function renderArticle(id) {
   state.currentArticle = { volume, article };
   rememberRead(volume, article);
   updateChrome('home');
-  const paragraphs = article.paragraphs.map((paragraph) => `<p>${esc(paragraph)}</p>`).join('');
+  const paragraphs = article.paragraphs.map((paragraph, paragraphIndex) => `<p data-speech-index="${paragraphIndex}">${esc(paragraph)}</p>`).join('');
   app.innerHTML = `<article class="reader-shell">
     <div class="reader-tools"><a class="back-link" href="#/volume/${volume.id}">←　${esc(volume.title)}篇目</a><div class="reader-actions">
       <button id="bookmark-toggle" type="button" aria-pressed="${bookmarked}" aria-label="${bookmarked ? '移除書籤' : '加入書籤'}" title="${bookmarked ? '移除書籤' : '加入書籤'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.8c0-.9.7-1.6 1.6-1.6h8.8c.9 0 1.6.7 1.6 1.6V21l-6-3.8L6 21V4.8Z"/></svg></button>
+      <button id="speech-toggle" type="button" aria-label="開始朗讀" title="開始朗讀"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
       <button id="font-down" type="button" aria-label="縮小字體" title="縮小字體">A−</button><button id="font-up" type="button" aria-label="放大字體" title="放大字體">A+</button>
     </div></div>
     <header class="article-header"><p class="eyebrow">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</p><h1>${esc(article.title)}</h1>${article.subtitle ? `<p class="article-subtitle">${esc(article.subtitle)}</p>` : ''}</header>
     ${article.scripture ? `<p class="scripture">讀經：${esc(article.scripture)}</p>` : ''}
+    <span id="speech-status" class="visually-hidden" role="status" aria-live="polite"></span>
     <div class="article-body">${paragraphs}</div>
     <nav class="reader-pager" aria-label="文章導覽">${previous ? `<a class="pager-link" href="#/article/${encodeURIComponent(previous.id)}"><span>上一篇</span><strong>← ${esc(previous.title)}</strong></a>` : '<span></span>'}<a class="pager-home" href="#/volume/${volume.id}" aria-label="回到${esc(volume.title)}篇目" title="回到${esc(volume.title)}篇目"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5.5 9v11h13V9M9 20v-6h6v6"/></svg></a>${next ? `<a class="pager-link pager-link-next" href="#/article/${encodeURIComponent(next.id)}"><span>下一篇</span><strong>${esc(next.title)} →</strong></a>` : '<span></span>'}</nav>
   </article>`;
@@ -126,6 +227,10 @@ async function renderArticle(id) {
   readerFloat.querySelector('[data-scroll="top"]').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   readerFloat.querySelector('[data-scroll="bottom"]').addEventListener('click', () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
   document.querySelector('#bookmark-toggle').addEventListener('click', toggleBookmark);
+  document.querySelector('#speech-toggle').addEventListener('click', toggleArticleSpeech);
+  document.querySelectorAll('.article-body [data-speech-index]').forEach((paragraph) => {
+    paragraph.addEventListener('click', () => startArticleSpeech(Number(paragraph.dataset.speechIndex)));
+  });
   document.querySelector('#font-down').addEventListener('click', () => adjustFont(-1));
   document.querySelector('#font-up').addEventListener('click', () => adjustFont(1));
   applyFontSize();
@@ -282,6 +387,7 @@ function renderNotReady(message) {
 }
 
 async function route() {
+  stopArticleSpeech();
   const [, routeName, id] = location.hash.match(/^#\/(\w+)(?:\/([^/?#]+))?/) || [];
   try {
     await loadBooks();
