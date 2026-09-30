@@ -2,7 +2,7 @@ const app = document.querySelector('#app');
 const storageKey = 'twelveBaskets_';
 const state = { books: null, volumes: new Map(), currentArticle: null, pendingBookmarkImport: null };
 let readerFloatTimer;
-let speechSession = { token: 0, chunks: [], index: 0, status: 'idle' };
+let speechSession = { token: 0, chunks: [], index: 0, charIndex: 0, status: 'idle' };
 
 const readStored = (key, fallback) => {
   try {
@@ -97,6 +97,7 @@ function stopArticleSpeech() {
   speechSession.token += 1;
   speechSession.chunks = [];
   speechSession.index = 0;
+  speechSession.charIndex = 0;
   speechSession.status = 'idle';
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   document.querySelectorAll('.article-body [data-speech-active]').forEach((paragraph) => paragraph.removeAttribute('data-speech-active'));
@@ -110,16 +111,17 @@ function toggleArticleSpeech() {
   }
 
   if (speechSession.status === 'speaking') {
-    window.speechSynthesis.pause();
+    speechSession.token += 1;
     speechSession.status = 'paused';
+    window.speechSynthesis.cancel();
     updateSpeechButton('繼續朗讀');
     return;
   }
 
   if (speechSession.status === 'paused') {
-    window.speechSynthesis.resume();
     speechSession.status = 'speaking';
     updateSpeechButton('暫停朗讀');
+    speakNextChunk(speechSession.token);
     return;
   }
 
@@ -137,7 +139,7 @@ function startArticleSpeech(paragraphIndex) {
     .filter(({ text }) => text.trim());
   const startIndex = chunks.findIndex(({ index }) => index >= paragraphIndex);
   if (startIndex < 0) return;
-  speechSession = { token: speechSession.token + 1, chunks, index: startIndex, status: 'speaking' };
+  speechSession = { token: speechSession.token + 1, chunks, index: startIndex, charIndex: 0, status: 'speaking' };
   window.speechSynthesis.cancel();
   const token = speechSession.token;
   document.querySelector('#speech-status').textContent = `正在從第 ${paragraphIndex + 1} 段開始朗讀。`;
@@ -161,16 +163,22 @@ function speakNextChunk(token) {
   }
 
   const chunk = speechSession.chunks[speechSession.index];
+  const startCharIndex = speechSession.charIndex;
   setActiveSpeechParagraph(chunk.index);
-  const utterance = new SpeechSynthesisUtterance(chunk.text);
+  const utterance = new SpeechSynthesisUtterance(chunk.text.slice(startCharIndex));
   utterance.lang = 'zh-TW';
   const voices = window.speechSynthesis.getVoices();
   utterance.voice = voices.find((voice) => voice.lang.toLowerCase() === 'zh-tw')
     || voices.find((voice) => voice.lang.toLowerCase().startsWith('zh'))
     || null;
+  utterance.onboundary = (event) => {
+    if (token !== speechSession.token || typeof event.charIndex !== 'number') return;
+    speechSession.charIndex = startCharIndex + event.charIndex;
+  };
   utterance.onend = () => {
     if (token !== speechSession.token) return;
     speechSession.index += 1;
+    speechSession.charIndex = 0;
     speakNextChunk(token);
   };
   utterance.onerror = (event) => {
