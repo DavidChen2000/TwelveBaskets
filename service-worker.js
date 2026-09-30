@@ -1,5 +1,5 @@
-const CACHE_NAME = 'twelve-baskets-v4';
-const APP_SHELL = ['./', './index.html', './manifest.json', './css/app.css', './js/app.js', './data/books.json', './data/volume01.json'];
+const CACHE_NAME = 'twelve-baskets-v5';
+const APP_SHELL = ['./', './index.html', './manifest.json', './css/app.css', './js/app.js', './icons/icon-192.png', './icons/icon-512.png', './data/books.json', './data/volume01.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));

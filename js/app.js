@@ -1,6 +1,7 @@
 const app = document.querySelector('#app');
 const storageKey = 'twelveBaskets_';
 const state = { books: null, volumes: new Map(), currentArticle: null };
+let readerFloatTimer;
 
 const readStored = (key, fallback) => {
   try {
@@ -81,6 +82,14 @@ async function findArticle(articleId) {
 
 function rememberRead(volume, article) {
   writeStored('lastRead', { volumeId: volume.id, articleId: article.id, title: article.title });
+}
+
+function revealReaderFloat() {
+  const controls = document.querySelector('.reader-float');
+  if (!controls) return;
+  controls.classList.add('is-visible');
+  window.clearTimeout(readerFloatTimer);
+  readerFloatTimer = window.setTimeout(() => controls.classList.remove('is-visible'), 1000);
 }
 
 async function renderArticle(id) {
@@ -190,6 +199,7 @@ document.querySelector('#theme-toggle').addEventListener('click', () => {
 const savedTheme = readStored('settings', {}).theme;
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 window.addEventListener('hashchange', route);
+window.addEventListener('scroll', revealReaderFloat, { passive: true });
 route();
 
 if ('serviceWorker' in navigator) {
