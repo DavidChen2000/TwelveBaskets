@@ -436,6 +436,15 @@ function registerServiceWorkerUpdates() {
     banner.hidden = false;
   };
 
+  const observeInstallingWorker = (worker) => {
+    if (!worker) return;
+    const checkState = () => {
+      if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+    };
+    worker.addEventListener('statechange', checkState);
+    checkState();
+  };
+
   applyButton.addEventListener('click', () => waitingWorker?.postMessage({ type: 'SKIP_WAITING' }));
   dismissButton.addEventListener('click', () => { banner.hidden = true; });
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -450,14 +459,11 @@ function registerServiceWorkerUpdates() {
 
   navigator.serviceWorker.register('./service-worker.js').then((registration) => {
     if (registration.waiting && navigator.serviceWorker.controller) showUpdate(registration.waiting);
-
-    registration.addEventListener('updatefound', () => {
-      const installingWorker = registration.installing;
-      installingWorker?.addEventListener('statechange', () => {
-        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-          showUpdate(installingWorker);
-        }
-      });
+    observeInstallingWorker(registration.installing);
+    registration.addEventListener('updatefound', () => observeInstallingWorker(registration.installing));
+    registration.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') registration.update().catch(() => {});
     });
   }).catch(() => {});
 }

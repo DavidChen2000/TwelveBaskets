@@ -1,4 +1,4 @@
-const CACHE_NAME = 'twelve-baskets-v11';
+const CACHE_NAME = 'twelve-baskets-v12';
 const CACHE_PREFIX = 'twelve-baskets-';
 const APP_SHELL = ['./', './index.html', './manifest.json', './css/app.css', './js/app.js', './icons/icon-192.png', './icons/icon-512.png', './data/books.json', './data/volume01.json'];
 
