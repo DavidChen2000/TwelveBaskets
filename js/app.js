@@ -429,6 +429,7 @@ function registerServiceWorkerUpdates() {
   const dismissButton = document.querySelector('#update-dismiss');
   let waitingWorker = null;
   let hadController = Boolean(navigator.serviceWorker.controller);
+  let updateAccepted = false;
   let reloading = false;
 
   const showUpdate = (worker) => {
@@ -436,19 +437,22 @@ function registerServiceWorkerUpdates() {
     banner.hidden = false;
   };
 
-  const observeInstallingWorker = (worker) => {
+  const observeInstallingWorker = (registration, worker) => {
     if (!worker) return;
     const checkState = () => {
-      if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+      if (worker.state === 'installed' && registration.active) showUpdate(worker);
     };
     worker.addEventListener('statechange', checkState);
     checkState();
   };
 
-  applyButton.addEventListener('click', () => waitingWorker?.postMessage({ type: 'SKIP_WAITING' }));
+  applyButton.addEventListener('click', () => {
+    updateAccepted = true;
+    waitingWorker?.postMessage({ type: 'SKIP_WAITING' });
+  });
   dismissButton.addEventListener('click', () => { banner.hidden = true; });
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController) {
+    if (!hadController && !updateAccepted) {
       hadController = true;
       return;
     }
@@ -458,9 +462,9 @@ function registerServiceWorkerUpdates() {
   });
 
   navigator.serviceWorker.register('./service-worker.js').then((registration) => {
-    if (registration.waiting && navigator.serviceWorker.controller) showUpdate(registration.waiting);
-    observeInstallingWorker(registration.installing);
-    registration.addEventListener('updatefound', () => observeInstallingWorker(registration.installing));
+    if (registration.waiting && registration.active) showUpdate(registration.waiting);
+    observeInstallingWorker(registration, registration.installing);
+    registration.addEventListener('updatefound', () => observeInstallingWorker(registration, registration.installing));
     registration.update().catch(() => {});
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') registration.update().catch(() => {});
