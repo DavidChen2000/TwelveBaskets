@@ -1,3 +1,5 @@
+import { findMatchingArticles, normalizeSearchText } from './search-utils.js';
+
 const app = document.querySelector('#app');
 const storageKey = 'twelveBaskets_';
 const state = { books: null, volumes: new Map(), currentArticle: null, pendingBookmarkImport: null };
@@ -55,9 +57,64 @@ function renderHome() {
         <div><p class="eyebrow">READING ROOM · 12 VOLUMES</p><h1>十二籃</h1><p class="lead">一輯一輯地讀，讓神的話陪伴每天的靈修時刻。</p></div>
         ${resume ? `<a class="resume-link" href="#/article/${encodeURIComponent(lastRead.articleId)}"><small>接續閱讀 · ${esc(resume.title)}</small><strong>${esc(lastRead.title)}　→</strong></a>` : ''}
       </div>
+      <div class="search-panel">
+        <form class="search-form" id="search-form" action="#/search" autocomplete="off">
+          <label class="search-field" for="global-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M16 16l5 5"></path></svg>
+            <input id="global-search" type="search" name="q" placeholder="搜尋文章標題、經文或內容" aria-label="搜尋文章" />
+          </label>
+          <button class="bookmark-action bookmark-action-primary" type="submit">搜尋</button>
+        </form>
+      </div>
       <div class="section-heading"><h2>全書輯目</h2><span>共 ${volumes.length} 輯</span></div>
       <div class="volume-grid">${volumes.map((volume, index) => `<a class="volume-card" style="--i:${index}" href="#/volume/${volume.id}"><span class="volume-number">VOLUME ${String(volume.number).padStart(2, '0')}</span><strong>${esc(volume.title)}</strong><span class="volume-meta">${volume.articleCount ? `${volume.articleCount} 篇` : '開啟輯目'} <span aria-hidden="true">↗</span></span></a>`).join('')}</div>
     </section>`;
+  const searchForm = document.querySelector('#search-form');
+  const searchInput = document.querySelector('#global-search');
+  if (searchForm && searchInput) {
+    searchForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const query = searchInput.value.trim();
+      location.hash = query ? `#/search/${encodeURIComponent(query)}` : '#/search';
+    });
+  }
+}
+
+async function searchArticles(rawQuery) {
+  const query = normalizeSearchText(rawQuery);
+  if (!query) return [];
+  await loadBooks();
+  const volumes = await Promise.all(state.books.volumes.map(async ({ id }) => loadVolume(id)));
+  return findMatchingArticles({ query, volumes: volumes.filter(Boolean) }).slice(0, 100);
+}
+
+async function renderSearch(query = '') {
+  updateChrome('search');
+  const normalizedQuery = normalizeSearchText(query);
+  const matches = normalizedQuery ? await searchArticles(normalizedQuery) : [];
+  app.innerHTML = `<section class="view-shell">
+    <a class="back-link" href="#/home">←　回到全書輯目</a>
+    <div class="search-panel" style="margin-top:24px;">
+      <form class="search-form" id="search-form" action="#/search" autocomplete="off">
+        <label class="search-field" for="search-input">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M16 16l5 5"></path></svg>
+          <input id="search-input" type="search" name="q" value="${esc(query)}" placeholder="搜尋文章標題、經文或內容" aria-label="搜尋文章" />
+        </label>
+        <button class="bookmark-action bookmark-action-primary" type="submit">搜尋</button>
+      </form>
+    </div>
+    ${normalizedQuery ? (matches.length ? `<p class="search-summary">找到 ${matches.length} 篇文章</p>` : '<p class="search-status">找不到符合的文章，請換一個關鍵字再試一次。</p>') : '<p class="search-status">輸入關鍵字，搜尋文章標題、經文或內容。</p>'}
+    ${matches.length ? `<div class="article-list">${matches.map(({ volume, article, snippet }) => `<a class="search-result-card" href="#/article/${encodeURIComponent(article.id)}"><span class="search-result-meta">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</span><strong>${esc(article.title)}</strong>${article.subtitle ? `<span class="search-result-meta">${esc(article.subtitle)}</span>` : ''}<span class="search-result-snippet">${esc(snippet || article.title)}</span></a>`).join('')}</div>` : ''}
+  </section>`;
+  const form = document.querySelector('#search-form');
+  const input = document.querySelector('#search-input');
+  if (form && input) {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const nextValue = input.value.trim();
+      location.hash = nextValue ? `#/search/${encodeURIComponent(nextValue)}` : '#/search';
+    });
+  }
 }
 
 async function renderVolume(id) {
@@ -199,6 +256,35 @@ function revealReaderFloat() {
   readerFloatTimer = window.setTimeout(() => controls.classList.remove('is-visible'), 931);
 }
 
+function bindArticleSwipeNavigation(reader) {
+  let touchStart = null;
+  reader.addEventListener('touchstart', (event) => {
+    if (event.touches.length !== 1 || event.target.closest('a, button, input, textarea, select')) {
+      touchStart = null;
+      return;
+    }
+    const touch = event.touches[0];
+    touchStart = { x: touch.clientX, y: touch.clientY };
+  }, { passive: true });
+  reader.addEventListener('touchend', (event) => {
+    if (!touchStart || event.changedTouches.length !== 1) {
+      touchStart = null;
+      return;
+    }
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - touchStart.x;
+    const deltaY = touch.clientY - touchStart.y;
+    touchStart = null;
+    if (Math.abs(deltaX) < 80 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return;
+
+    const link = reader.querySelector(deltaX < 0 ? '.pager-link-next' : '.pager-link:not(.pager-link-next)');
+    if (!link) return;
+    event.preventDefault();
+    location.hash = link.getAttribute('href').slice(1);
+  }, { passive: false });
+  reader.addEventListener('touchcancel', () => { touchStart = null; }, { passive: true });
+}
+
 async function renderArticle(id) {
   const found = await findArticle(id);
   if (!found) {
@@ -227,11 +313,13 @@ async function renderArticle(id) {
     <div class="article-body">${paragraphs}</div>
     <nav class="reader-pager" aria-label="文章導覽">${previous ? `<a class="pager-link" href="#/article/${encodeURIComponent(previous.id)}"><span>上一篇</span><strong>← ${esc(previous.title)}</strong></a>` : '<span></span>'}<a class="pager-home" href="#/volume/${volume.id}" aria-label="回到${esc(volume.title)}篇目" title="回到${esc(volume.title)}篇目"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5.5 9v11h13V9M9 20v-6h6v6"/></svg></a>${next ? `<a class="pager-link pager-link-next" href="#/article/${encodeURIComponent(next.id)}"><span>下一篇</span><strong>${esc(next.title)} →</strong></a>` : '<span></span>'}</nav>
   </article>`;
+  const readerShell = document.querySelector('.reader-shell');
+  bindArticleSwipeNavigation(readerShell);
   const readerFloat = document.createElement('nav');
   readerFloat.className = 'reader-float';
   readerFloat.setAttribute('aria-label', '閱讀頁快速導覽');
   readerFloat.innerHTML = `<button class="reader-float-button" type="button" data-scroll="top" aria-label="移至頁面頂端" title="移至頁面頂端">↑</button><button class="reader-float-button" type="button" data-scroll="bottom" aria-label="移至頁面底端" title="移至頁面底端">↓</button>`;
-  document.querySelector('.reader-shell').append(readerFloat);
+  readerShell.append(readerFloat);
   readerFloat.querySelector('[data-scroll="top"]').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   readerFloat.querySelector('[data-scroll="bottom"]').addEventListener('click', () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
   document.querySelector('#bookmark-toggle').addEventListener('click', toggleBookmark);
@@ -400,6 +488,7 @@ async function route() {
   try {
     await loadBooks();
     if (!routeName || routeName === 'home') renderHome();
+    else if (routeName === 'search') await renderSearch(decodeURIComponent(id || ''));
     else if (routeName === 'volume') await renderVolume(decodeURIComponent(id || ''));
     else if (routeName === 'article') await renderArticle(decodeURIComponent(id || ''));
     else if (routeName === 'bookmarks') await renderBookmarks();
