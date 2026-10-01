@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'twelve-baskets-';
-const CACHE_NAME = 'twelve-baskets-v18';
+const CACHE_NAME = 'twelve-baskets-v19';
 const APP_SHELL = ['./', './index.html', './manifest.json', './css/app.css', './js/app.js', './icons/icon-192.png', './icons/icon-512.png', './data/books.json', './data/volume01.json'];
 const APP_SHELL_PATHS = new Set(APP_SHELL.map((path) => new URL(path, self.registration.scope).pathname));
 

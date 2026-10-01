@@ -140,6 +140,10 @@ h1, h2, h3, p { margin-top: 0; }
 .reader-float-button:hover { color: var(--green); border-color: var(--green); transform: translateY(-1px); }
 .reader-float-button:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
 .reader-float-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.reader-speech-stop { position: fixed; z-index: 11; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); width: 48px; height: 48px; display: inline-flex; align-items: center; justify-content: center; padding: 0; color: var(--paper); background: var(--coral); border: 0; border-radius: 50%; box-shadow: 0 3px 12px rgb(32 39 32 / 20%); cursor: pointer; }
+.reader-speech-stop[hidden] { display: none; }
+.reader-speech-stop svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.reader-speech-stop:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 .empty-state { max-width: 650px; margin: 60px auto; padding: 24px 0; border-block: 1px solid var(--line); color: var(--muted); font: 15px/1.9 'Noto Serif TC', serif; }
 .loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 65vh; color: var(--muted); font: 16px var(--kai-font); }
 .loading span { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); animation: pulse 1s infinite alternate; }

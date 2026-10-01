@@ -145,12 +145,20 @@ function rememberRead(volume, article) {
   writeStored('lastRead', { volumeId: volume.id, articleId: article.id, title: article.title });
 }
 
-function updateSpeechButton(label) {
-  document.querySelectorAll('#speech-toggle, [data-reader-speech-toggle]').forEach((button) => {
-    button.setAttribute('aria-label', label);
-    button.title = label;
-    button.setAttribute('aria-pressed', String(speechSession.status === 'speaking'));
-  });
+function updateSpeechButton() {
+  const toggle = document.querySelector('#speech-toggle');
+  const toggleLabel = speechSession.status === 'speaking'
+    ? '暫停朗讀'
+    : speechSession.status === 'paused' ? '繼續朗讀' : '開始朗讀';
+  if (toggle) {
+    toggle.setAttribute('aria-label', toggleLabel);
+    toggle.title = toggleLabel;
+    toggle.setAttribute('aria-pressed', String(speechSession.status === 'speaking'));
+  }
+  const button = document.querySelector('#speech-stop');
+  if (!button) return;
+  button.hidden = speechSession.status !== 'speaking';
+  button.setAttribute('aria-pressed', String(speechSession.status === 'speaking'));
 }
 
 function stopArticleSpeech() {
@@ -161,7 +169,7 @@ function stopArticleSpeech() {
   speechSession.status = 'idle';
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   document.querySelectorAll('.article-body [data-speech-active]').forEach((paragraph) => paragraph.removeAttribute('data-speech-active'));
-  updateSpeechButton('開始朗讀');
+  updateSpeechButton();
 }
 
 function toggleArticleSpeech() {
@@ -174,13 +182,13 @@ function toggleArticleSpeech() {
     speechSession.token += 1;
     speechSession.status = 'paused';
     window.speechSynthesis.cancel();
-    updateSpeechButton('繼續朗讀');
+    updateSpeechButton();
     return;
   }
 
   if (speechSession.status === 'paused') {
     speechSession.status = 'speaking';
-    updateSpeechButton('暫停朗讀');
+    updateSpeechButton();
     speakNextChunk(speechSession.token);
     return;
   }
@@ -203,7 +211,7 @@ function startArticleSpeech(paragraphIndex) {
   window.speechSynthesis.cancel();
   const token = speechSession.token;
   document.querySelector('#speech-status').textContent = `正在從第 ${paragraphIndex + 1} 段開始朗讀。`;
-  updateSpeechButton('暫停朗讀');
+  updateSpeechButton();
   speakNextChunk(token);
 }
 
@@ -217,7 +225,7 @@ function speakNextChunk(token) {
   if (speechSession.index >= speechSession.chunks.length) {
     speechSession.status = 'idle';
     setActiveSpeechParagraph(-1);
-    updateSpeechButton('開始朗讀');
+    updateSpeechButton();
     document.querySelector('#speech-status').textContent = '朗讀完成。';
     return;
   }
@@ -245,7 +253,7 @@ function speakNextChunk(token) {
     if (token !== speechSession.token || event.error === 'canceled' || event.error === 'interrupted') return;
     speechSession.status = 'idle';
     setActiveSpeechParagraph(-1);
-    updateSpeechButton('開始朗讀');
+    updateSpeechButton();
     document.querySelector('#speech-status').textContent = '朗讀發生問題，請再試一次。';
   };
   window.speechSynthesis.speak(utterance);
@@ -321,11 +329,21 @@ async function renderArticle(id) {
   const readerFloat = document.createElement('nav');
   readerFloat.className = 'reader-float';
   readerFloat.setAttribute('aria-label', '閱讀頁快速導覽');
-  readerFloat.innerHTML = `<button class="reader-float-button" type="button" data-scroll="top" aria-label="移至頁面頂端" title="移至頁面頂端">↑</button><button class="reader-float-button" type="button" data-scroll="bottom" aria-label="移至頁面底端" title="移至頁面底端">↓</button><button class="reader-float-button" type="button" data-reader-speech-toggle aria-label="開始朗讀" aria-pressed="false" title="開始朗讀"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>`;
+  readerFloat.innerHTML = `<button class="reader-float-button" type="button" data-scroll="top" aria-label="移至頁面頂端" title="移至頁面頂端">↑</button><button class="reader-float-button" type="button" data-scroll="bottom" aria-label="移至頁面底端" title="移至頁面底端">↓</button>`;
   readerShell.append(readerFloat);
   readerFloat.querySelector('[data-scroll="top"]').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   readerFloat.querySelector('[data-scroll="bottom"]').addEventListener('click', () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
-  readerFloat.querySelector('[data-reader-speech-toggle]').addEventListener('click', toggleArticleSpeech);
+  const speechStop = document.createElement('button');
+  speechStop.id = 'speech-stop';
+  speechStop.className = 'reader-speech-stop';
+  speechStop.type = 'button';
+  speechStop.setAttribute('aria-label', '停止朗讀');
+  speechStop.title = '停止朗讀';
+  speechStop.setAttribute('aria-pressed', 'false');
+  speechStop.hidden = true;
+  speechStop.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6m0-6-5 6"/></svg>';
+  readerShell.append(speechStop);
+  speechStop.addEventListener('click', stopArticleSpeech);
   document.querySelector('#bookmark-toggle').addEventListener('click', toggleBookmark);
   document.querySelector('#speech-toggle').addEventListener('click', toggleArticleSpeech);
   document.querySelectorAll('.article-body [data-speech-index]').forEach((paragraph) => {
