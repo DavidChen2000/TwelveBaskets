@@ -2,6 +2,9 @@ import { findMatchingArticles, normalizeSearchText } from './search-utils.js';
 
 const app = document.querySelector('#app');
 const storageKey = 'twelveBaskets_';
+const userAgent = navigator.userAgent;
+const isSafari = /Safari/i.test(userAgent) && !/(Chrome|Chromium|CriOS|Edg|EdgiOS|OPR|OPiOS|FxiOS|Firefox|Android)/i.test(userAgent);
+const readerFloatDuration = isSafari ? 2000 : 931;
 const state = { books: null, volumes: new Map(), currentArticle: null, pendingBookmarkImport: null };
 let readerFloatTimer;
 let speechSession = { token: 0, chunks: [], index: 0, charIndex: 0, status: 'idle' };
@@ -143,11 +146,11 @@ function rememberRead(volume, article) {
 }
 
 function updateSpeechButton(label) {
-  const button = document.querySelector('#speech-toggle');
-  if (!button) return;
-  button.setAttribute('aria-label', label);
-  button.title = label;
-  button.setAttribute('aria-pressed', String(speechSession.status === 'speaking'));
+  document.querySelectorAll('#speech-toggle, [data-reader-speech-toggle]').forEach((button) => {
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    button.setAttribute('aria-pressed', String(speechSession.status === 'speaking'));
+  });
 }
 
 function stopArticleSpeech() {
@@ -253,7 +256,7 @@ function revealReaderFloat() {
   if (!controls) return;
   controls.classList.add('is-visible');
   window.clearTimeout(readerFloatTimer);
-  readerFloatTimer = window.setTimeout(() => controls.classList.remove('is-visible'), 931);
+  readerFloatTimer = window.setTimeout(() => controls.classList.remove('is-visible'), readerFloatDuration);
 }
 
 function bindArticleSwipeNavigation(reader) {
@@ -318,10 +321,11 @@ async function renderArticle(id) {
   const readerFloat = document.createElement('nav');
   readerFloat.className = 'reader-float';
   readerFloat.setAttribute('aria-label', '閱讀頁快速導覽');
-  readerFloat.innerHTML = `<button class="reader-float-button" type="button" data-scroll="top" aria-label="移至頁面頂端" title="移至頁面頂端">↑</button><button class="reader-float-button" type="button" data-scroll="bottom" aria-label="移至頁面底端" title="移至頁面底端">↓</button>`;
+  readerFloat.innerHTML = `<button class="reader-float-button" type="button" data-scroll="top" aria-label="移至頁面頂端" title="移至頁面頂端">↑</button><button class="reader-float-button" type="button" data-scroll="bottom" aria-label="移至頁面底端" title="移至頁面底端">↓</button><button class="reader-float-button" type="button" data-reader-speech-toggle aria-label="開始朗讀" aria-pressed="false" title="開始朗讀"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>`;
   readerShell.append(readerFloat);
   readerFloat.querySelector('[data-scroll="top"]').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   readerFloat.querySelector('[data-scroll="bottom"]').addEventListener('click', () => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
+  readerFloat.querySelector('[data-reader-speech-toggle]').addEventListener('click', toggleArticleSpeech);
   document.querySelector('#bookmark-toggle').addEventListener('click', toggleBookmark);
   document.querySelector('#speech-toggle').addEventListener('click', toggleArticleSpeech);
   document.querySelectorAll('.article-body [data-speech-index]').forEach((paragraph) => {
