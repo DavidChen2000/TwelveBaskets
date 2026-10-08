@@ -9,7 +9,7 @@ const app = document.querySelector('#app');
 const userAgent = navigator.userAgent;
 const isSafari = /Safari/i.test(userAgent) && !/(Chrome|Chromium|CriOS|Edg|EdgiOS|OPR|OPiOS|FxiOS|Firefox|Android)/i.test(userAgent);
 const readerFloatDuration = isSafari ? 2000 : 931;
-const state = { currentArticle: null, pendingBookmarkImport: null };
+const state = { currentArticle: null, pendingBookmarkImport: null, scrollArticleToTop: false };
 const libraryData = createLibraryData();
 const articleSpeech = createArticleSpeechController(() => state.currentArticle?.article);
 let readerFloatTimer;
@@ -151,7 +151,7 @@ function bindArticleSwipeNavigation(reader) {
   reader.addEventListener('touchcancel', () => { touchStart = null; }, { passive: true });
 }
 
-async function renderArticle(id) {
+async function renderArticle(id, scrollToTop = false) {
   const found = await libraryData.findArticle(id);
   if (!found) {
     renderNotReady('找不到這篇文章。');
@@ -180,9 +180,13 @@ async function renderArticle(id) {
     <div class="article-body">${paragraphs}</div>
     <nav class="reader-pager" aria-label="文章導覽">${previous ? `<a class="pager-link" href="#/article/${encodeURIComponent(previous.id)}"><span>上一篇</span><strong>← ${esc(previous.title)}</strong></a>` : '<span></span>'}<a class="pager-home" href="#/volume/${volume.id}" aria-label="回到${esc(volume.title)}篇目" title="回到${esc(volume.title)}篇目"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5.5 9v11h13V9M9 20v-6h6v6"/></svg></a>${next ? `<a class="pager-link pager-link-next" href="#/article/${encodeURIComponent(next.id)}"><span>下一篇</span><strong>${esc(next.title)} →</strong></a>` : '<span></span>'}</nav>
   </article>`;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
   const readerShell = document.querySelector('.reader-shell');
   bindArticleSwipeNavigation(readerShell);
+  // 點擊上一篇或下一篇時回到頂端；觸控滑動不設定此旗標。
+  readerShell.querySelectorAll('.reader-pager .pager-link').forEach((link) => {
+    link.addEventListener('click', () => { state.scrollArticleToTop = true; });
+  });
   const readerFloat = document.createElement('nav');
   readerFloat.className = 'reader-float';
   readerFloat.setAttribute('aria-label', '閱讀頁快速導覽');
@@ -337,6 +341,8 @@ function renderNotReady(message) {
 }
 
 async function route() {
+  const scrollArticleToTop = state.scrollArticleToTop;
+  state.scrollArticleToTop = false;
   articleSpeech.stop();
   const [, routeName, id] = location.hash.match(/^#\/(\w+)(?:\/([^/?#]+))?/) || [];
   try {
@@ -344,7 +350,7 @@ async function route() {
     if (!routeName || routeName === 'home') await renderHome();
     else if (routeName === 'search') await renderSearch(decodeURIComponent(id || ''));
     else if (routeName === 'volume') await renderVolume(decodeURIComponent(id || ''));
-    else if (routeName === 'article') await renderArticle(decodeURIComponent(id || ''));
+    else if (routeName === 'article') await renderArticle(decodeURIComponent(id || ''), scrollArticleToTop);
     else if (routeName === 'bookmarks') await renderBookmarks();
     else renderNotReady('此頁面尚未開放。');
     app.focus({ preventScroll: true });
