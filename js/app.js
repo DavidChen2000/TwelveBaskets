@@ -318,9 +318,10 @@ async function renderArticle(id) {
       <button id="speech-toggle" type="button" aria-label="開始朗讀" title="開始朗讀"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
       <button id="font-down" type="button" aria-label="縮小字體" title="縮小字體">A−</button><button id="font-up" type="button" aria-label="放大字體" title="放大字體">A+</button>
     </div></div>
-    <header class="article-header"><p class="eyebrow">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</p><h1>${esc(article.title)}</h1>${article.subtitle ? `<p class="article-subtitle">${esc(article.subtitle)}</p>` : ''}</header>
+    <header class="article-header"><div class="article-heading-meta"><p class="eyebrow">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</p><button id="share-article" class="article-share" type="button" aria-label="分享文章" title="分享文章"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.4"></path></svg><span>分享</span></button></div><h1>${esc(article.title)}</h1>${article.subtitle ? `<p class="article-subtitle">${esc(article.subtitle)}</p>` : ''}</header>
     ${article.scripture ? `<p class="scripture">讀經：${esc(article.scripture)}</p>` : ''}
     <span id="speech-status" class="visually-hidden" role="status" aria-live="polite"></span>
+    <span id="share-status" class="visually-hidden" role="status" aria-live="polite"></span>
     <div class="article-body">${paragraphs}</div>
     <nav class="reader-pager" aria-label="文章導覽">${previous ? `<a class="pager-link" href="#/article/${encodeURIComponent(previous.id)}"><span>上一篇</span><strong>← ${esc(previous.title)}</strong></a>` : '<span></span>'}<a class="pager-home" href="#/volume/${volume.id}" aria-label="回到${esc(volume.title)}篇目" title="回到${esc(volume.title)}篇目"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5.5 9v11h13V9M9 20v-6h6v6"/></svg></a>${next ? `<a class="pager-link pager-link-next" href="#/article/${encodeURIComponent(next.id)}"><span>下一篇</span><strong>${esc(next.title)} →</strong></a>` : '<span></span>'}</nav>
   </article>`;
@@ -345,6 +346,7 @@ async function renderArticle(id) {
   readerShell.append(speechStop);
   speechStop.addEventListener('click', stopArticleSpeech);
   document.querySelector('#bookmark-toggle').addEventListener('click', toggleBookmark);
+  document.querySelector('#share-article').addEventListener('click', shareArticle);
   document.querySelector('#speech-toggle').addEventListener('click', toggleArticleSpeech);
   document.querySelectorAll('.article-body [data-speech-index]').forEach((paragraph) => {
     paragraph.addEventListener('click', () => startArticleSpeech(Number(paragraph.dataset.speechIndex)));
@@ -364,6 +366,25 @@ function toggleBookmark() {
   button.setAttribute('aria-label', updated.includes(id) ? '移除書籤' : '加入書籤');
   button.title = updated.includes(id) ? '移除書籤' : '加入書籤';
   updateChrome('home');
+}
+
+async function shareArticle() {
+  const status = document.querySelector('#share-status');
+  const { volume, article } = state.currentArticle;
+  const url = window.location.href;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: article.title, text: volume.title, url });
+      return;
+    }
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(url);
+    status.textContent = '文章連結已複製。';
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    status.textContent = '無法分享或複製連結，請複製網址列連結。';
+  }
 }
 
 function adjustFont(direction) {
