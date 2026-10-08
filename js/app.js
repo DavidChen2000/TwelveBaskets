@@ -1,43 +1,21 @@
 import { findMatchingArticles, normalizeSearchText } from './search-utils.js';
+import { registerServiceWorkerUpdates } from './service-worker-updates.js';
+import { createArticleSpeechController } from './article-speech.js';
+import { createBookmarkService } from './bookmark-service.js';
+import { createLibraryData } from './library-data.js';
+import { createStorage } from './storage.js';
 
 const app = document.querySelector('#app');
-const storageKey = 'twelveBaskets_';
 const userAgent = navigator.userAgent;
 const isSafari = /Safari/i.test(userAgent) && !/(Chrome|Chromium|CriOS|Edg|EdgiOS|OPR|OPiOS|FxiOS|Firefox|Android)/i.test(userAgent);
 const readerFloatDuration = isSafari ? 2000 : 931;
-const state = { books: null, volumes: new Map(), currentArticle: null, pendingBookmarkImport: null };
+const state = { currentArticle: null, pendingBookmarkImport: null };
+const libraryData = createLibraryData();
+const articleSpeech = createArticleSpeechController(() => state.currentArticle?.article);
 let readerFloatTimer;
-let speechSession = { token: 0, chunks: [], index: 0, charIndex: 0, status: 'idle' };
-
-const readStored = (key, fallback) => {
-  try {
-    const value = localStorage.getItem(`${storageKey}${key}`);
-    return value ? JSON.parse(value) : fallback;
-  } catch {
-    return fallback;
-  }
-};
-
-const writeStored = (key, value) => localStorage.setItem(`${storageKey}${key}`, JSON.stringify(value));
+const { readStored, writeStored } = createStorage(localStorage);
+const bookmarkService = createBookmarkService({ readStored, writeStored });
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-const volumePath = (id) => `./data/volume${id}.json`;
-
-async function loadBooks() {
-  if (state.books) return state.books;
-  const response = await fetch('./data/books.json');
-  if (!response.ok) throw new Error('無法載入書目資料');
-  state.books = await response.json();
-  return state.books;
-}
-
-async function loadVolume(id) {
-  if (state.volumes.has(id)) return state.volumes.get(id);
-  const response = await fetch(volumePath(id));
-  if (!response.ok) return null;
-  const volume = await response.json();
-  state.volumes.set(id, volume);
-  return volume;
-}
 
 function updateChrome(route) {
   document.querySelectorAll('[data-nav]').forEach((link) => {
@@ -45,15 +23,16 @@ function updateChrome(route) {
     if (selected) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
-  const bookmarks = readStored('bookmarks', []);
+  const bookmarks = bookmarkService.list();
   document.querySelector('#bookmark-count').textContent = bookmarks.length || '';
 }
 
-function renderHome() {
+async function renderHome() {
   updateChrome('home');
-  const volumes = state.books.volumes;
+  const books = await libraryData.loadBooks();
+  const volumes = books.volumes;
   const lastRead = readStored('lastRead', null);
-  const resume = lastRead ? state.books.volumes.find((volume) => volume.id === lastRead.volumeId) : null;
+  const resume = lastRead ? books.volumes.find((volume) => volume.id === lastRead.volumeId) : null;
   app.innerHTML = `
     <section class="home-shell">
       <div class="home-intro">
@@ -86,8 +65,8 @@ function renderHome() {
 async function searchArticles(rawQuery) {
   const query = normalizeSearchText(rawQuery);
   if (!query) return [];
-  await loadBooks();
-  const volumes = await Promise.all(state.books.volumes.map(async ({ id }) => loadVolume(id)));
+  const books = await libraryData.loadBooks();
+  const volumes = await Promise.all(books.volumes.map(async ({ id }) => libraryData.loadVolume(id)));
   return findMatchingArticles({ query, volumes: volumes.filter(Boolean) }).slice(0, 100);
 }
 
@@ -121,7 +100,7 @@ async function renderSearch(query = '') {
 }
 
 async function renderVolume(id) {
-  const volume = await loadVolume(id);
+  const volume = await libraryData.loadVolume(id);
   if (!volume) {
     renderNotReady('這一輯的篇目正在整理，請稍後再來。');
     return;
@@ -131,132 +110,8 @@ async function renderVolume(id) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-async function findArticle(articleId) {
-  await loadBooks();
-  for (const entry of state.books.volumes) {
-    const volume = await loadVolume(entry.id);
-    const article = volume?.articles.find((item) => item.id === articleId);
-    if (article) return { volume, article };
-  }
-  return null;
-}
-
 function rememberRead(volume, article) {
   writeStored('lastRead', { volumeId: volume.id, articleId: article.id, title: article.title });
-}
-
-function updateSpeechButton() {
-  const toggle = document.querySelector('#speech-toggle');
-  const toggleLabel = speechSession.status === 'speaking'
-    ? '暫停朗讀'
-    : speechSession.status === 'paused' ? '繼續朗讀' : '開始朗讀';
-  if (toggle) {
-    toggle.setAttribute('aria-label', toggleLabel);
-    toggle.title = toggleLabel;
-    toggle.setAttribute('aria-pressed', String(speechSession.status === 'speaking'));
-  }
-  const button = document.querySelector('#speech-stop');
-  if (!button) return;
-  button.hidden = speechSession.status !== 'speaking';
-  button.setAttribute('aria-pressed', String(speechSession.status === 'speaking'));
-}
-
-function stopArticleSpeech() {
-  speechSession.token += 1;
-  speechSession.chunks = [];
-  speechSession.index = 0;
-  speechSession.charIndex = 0;
-  speechSession.status = 'idle';
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-  document.querySelectorAll('.article-body [data-speech-active]').forEach((paragraph) => paragraph.removeAttribute('data-speech-active'));
-  updateSpeechButton();
-}
-
-function toggleArticleSpeech() {
-  if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
-    document.querySelector('#speech-status').textContent = '此瀏覽器不支援語音朗讀。';
-    return;
-  }
-
-  if (speechSession.status === 'speaking') {
-    speechSession.token += 1;
-    speechSession.status = 'paused';
-    window.speechSynthesis.cancel();
-    updateSpeechButton();
-    return;
-  }
-
-  if (speechSession.status === 'paused') {
-    speechSession.status = 'speaking';
-    updateSpeechButton();
-    speakNextChunk(speechSession.token);
-    return;
-  }
-
-  startArticleSpeech(0);
-}
-
-function startArticleSpeech(paragraphIndex) {
-  if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
-    document.querySelector('#speech-status').textContent = '此瀏覽器不支援語音朗讀。';
-    return;
-  }
-
-  const chunks = state.currentArticle.article.paragraphs
-    .map((text, index) => ({ text, index }))
-    .filter(({ text }) => text.trim());
-  const startIndex = chunks.findIndex(({ index }) => index >= paragraphIndex);
-  if (startIndex < 0) return;
-  speechSession = { token: speechSession.token + 1, chunks, index: startIndex, charIndex: 0, status: 'speaking' };
-  window.speechSynthesis.cancel();
-  const token = speechSession.token;
-  document.querySelector('#speech-status').textContent = `正在從第 ${paragraphIndex + 1} 段開始朗讀。`;
-  updateSpeechButton();
-  speakNextChunk(token);
-}
-
-function setActiveSpeechParagraph(index) {
-  document.querySelectorAll('.article-body [data-speech-active]').forEach((paragraph) => paragraph.removeAttribute('data-speech-active'));
-  document.querySelector(`.article-body [data-speech-index="${index}"]`)?.setAttribute('data-speech-active', 'true');
-}
-
-function speakNextChunk(token) {
-  if (token !== speechSession.token || speechSession.status !== 'speaking') return;
-  if (speechSession.index >= speechSession.chunks.length) {
-    speechSession.status = 'idle';
-    setActiveSpeechParagraph(-1);
-    updateSpeechButton();
-    document.querySelector('#speech-status').textContent = '朗讀完成。';
-    return;
-  }
-
-  const chunk = speechSession.chunks[speechSession.index];
-  const startCharIndex = speechSession.charIndex;
-  setActiveSpeechParagraph(chunk.index);
-  const utterance = new SpeechSynthesisUtterance(chunk.text.slice(startCharIndex));
-  utterance.lang = 'zh-TW';
-  const voices = window.speechSynthesis.getVoices();
-  utterance.voice = voices.find((voice) => voice.lang.toLowerCase() === 'zh-tw')
-    || voices.find((voice) => voice.lang.toLowerCase().startsWith('zh'))
-    || null;
-  utterance.onboundary = (event) => {
-    if (token !== speechSession.token || typeof event.charIndex !== 'number') return;
-    speechSession.charIndex = startCharIndex + event.charIndex;
-  };
-  utterance.onend = () => {
-    if (token !== speechSession.token) return;
-    speechSession.index += 1;
-    speechSession.charIndex = 0;
-    speakNextChunk(token);
-  };
-  utterance.onerror = (event) => {
-    if (token !== speechSession.token || event.error === 'canceled' || event.error === 'interrupted') return;
-    speechSession.status = 'idle';
-    setActiveSpeechParagraph(-1);
-    updateSpeechButton();
-    document.querySelector('#speech-status').textContent = '朗讀發生問題，請再試一次。';
-  };
-  window.speechSynthesis.speak(utterance);
 }
 
 function revealReaderFloat() {
@@ -297,7 +152,7 @@ function bindArticleSwipeNavigation(reader) {
 }
 
 async function renderArticle(id) {
-  const found = await findArticle(id);
+  const found = await libraryData.findArticle(id);
   if (!found) {
     renderNotReady('找不到這篇文章。');
     return;
@@ -306,7 +161,7 @@ async function renderArticle(id) {
   const index = volume.articles.findIndex((item) => item.id === article.id);
   const previous = volume.articles[index - 1];
   const next = volume.articles[index + 1];
-  const bookmarks = readStored('bookmarks', []);
+  const bookmarks = bookmarkService.list();
   const bookmarked = bookmarks.includes(article.id);
   state.currentArticle = { volume, article };
   rememberRead(volume, article);
@@ -325,6 +180,7 @@ async function renderArticle(id) {
     <div class="article-body">${paragraphs}</div>
     <nav class="reader-pager" aria-label="文章導覽">${previous ? `<a class="pager-link" href="#/article/${encodeURIComponent(previous.id)}"><span>上一篇</span><strong>← ${esc(previous.title)}</strong></a>` : '<span></span>'}<a class="pager-home" href="#/volume/${volume.id}" aria-label="回到${esc(volume.title)}篇目" title="回到${esc(volume.title)}篇目"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5.5 9v11h13V9M9 20v-6h6v6"/></svg></a>${next ? `<a class="pager-link pager-link-next" href="#/article/${encodeURIComponent(next.id)}"><span>下一篇</span><strong>${esc(next.title)} →</strong></a>` : '<span></span>'}</nav>
   </article>`;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   const readerShell = document.querySelector('.reader-shell');
   bindArticleSwipeNavigation(readerShell);
   const readerFloat = document.createElement('nav');
@@ -344,12 +200,12 @@ async function renderArticle(id) {
   speechStop.hidden = true;
   speechStop.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m16 9 5 6m0-6-5 6"/></svg>';
   readerShell.append(speechStop);
-  speechStop.addEventListener('click', stopArticleSpeech);
+  speechStop.addEventListener('click', articleSpeech.stop);
   document.querySelector('#bookmark-toggle').addEventListener('click', toggleBookmark);
   document.querySelector('#share-article').addEventListener('click', shareArticle);
-  document.querySelector('#speech-toggle').addEventListener('click', toggleArticleSpeech);
+  document.querySelector('#speech-toggle').addEventListener('click', articleSpeech.toggle);
   document.querySelectorAll('.article-body [data-speech-index]').forEach((paragraph) => {
-    paragraph.addEventListener('click', () => startArticleSpeech(Number(paragraph.dataset.speechIndex)));
+    paragraph.addEventListener('click', () => articleSpeech.startAt(Number(paragraph.dataset.speechIndex)));
   });
   document.querySelector('#font-down').addEventListener('click', () => adjustFont(-1));
   document.querySelector('#font-up').addEventListener('click', () => adjustFont(1));
@@ -358,10 +214,8 @@ async function renderArticle(id) {
 
 function toggleBookmark() {
   const button = document.querySelector('#bookmark-toggle');
-  const bookmarks = readStored('bookmarks', []);
   const id = state.currentArticle.article.id;
-  const updated = bookmarks.includes(id) ? bookmarks.filter((item) => item !== id) : [...bookmarks, id];
-  writeStored('bookmarks', updated);
+  const updated = bookmarkService.toggle(id);
   button.setAttribute('aria-pressed', String(updated.includes(id)));
   button.setAttribute('aria-label', updated.includes(id) ? '移除書籤' : '加入書籤');
   button.title = updated.includes(id) ? '移除書籤' : '加入書籤';
@@ -404,48 +258,12 @@ function applyFontSize() {
   if (body) body.style.fontSize = settings.fontSize;
 }
 
-async function exportBookmarks() {
-  const bookmarks = readStored('bookmarks', []);
-  const date = new Date().toISOString().slice(0, 10);
-  const file = new File([JSON.stringify({
-    app: 'twelve-baskets',
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    bookmarks: Array.isArray(bookmarks) ? bookmarks : [],
-  }, null, 2)], `twelve-baskets-bookmarks-${date}.json`, { type: 'application/json' });
-
-  if (navigator.share && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: '十二籃書籤' });
-      return;
-    } catch (error) {
-      if (error.name === 'AbortError') return;
-    }
-  }
-
-  const url = URL.createObjectURL(file);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = file.name;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function readFileAsText(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
-  });
-}
-
 async function renderBookmarks() {
   updateChrome('bookmarks');
-  const ids = readStored('bookmarks', []);
+  const ids = bookmarkService.list();
   const items = [];
   for (const id of ids) {
-    const found = await findArticle(id);
+    const found = await libraryData.findArticle(id);
     if (found) items.push(found);
   }
   app.innerHTML = `<section class="view-shell"><a class="back-link" href="#/home">←　回到全書輯目</a><p class="eyebrow" style="margin-top:34px">YOUR MARKS</p><h1 class="view-title">書籤</h1><div class="bookmark-tools"><button class="bookmark-action" id="bookmark-export" type="button">匯出書籤</button><button class="bookmark-action" id="bookmark-import-trigger" type="button">匯入書籤</button><input class="bookmark-file-input" id="bookmark-import-file" type="file" accept=".json,application/json" aria-label="選擇書籤備份檔"><span id="bookmark-feedback" class="bookmark-feedback" role="status" aria-live="polite"></span></div>${items.length ? `<div class="article-list">${items.map(({ volume, article }) => `<div class="article-row bookmark-row"><a class="bookmark-entry" href="#/article/${encodeURIComponent(article.id)}"><span class="article-index">${volume.id}</span><span class="article-title">${esc(article.title)}</span></a><button class="bookmark-delete" type="button" data-bookmark-id="${esc(article.id)}" data-bookmark-title="${esc(article.title)}" aria-label="刪除「${esc(article.title)}」書籤" title="刪除書籤"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5.5 7l1 14h11l1-14M9 7V4h6v3"/></svg></button></div>`).join('')}</div>` : '<p class="empty-state">尚未收藏文章。閱讀時按下書籤圖示，即可在這裡找到它。</p>'}<dialog class="bookmark-dialog" id="bookmark-delete-dialog" aria-labelledby="bookmark-delete-title"><h2 id="bookmark-delete-title">確認刪除書籤</h2><p id="bookmark-delete-message"></p><div class="bookmark-dialog-actions"><button class="bookmark-action" id="bookmark-delete-cancel" type="button">取消</button><button class="bookmark-action bookmark-action-danger" id="bookmark-delete-confirm" type="button">確認</button></div></dialog><dialog class="bookmark-dialog" id="bookmark-import-dialog" aria-labelledby="bookmark-import-title"><h2 id="bookmark-import-title">匯入書籤</h2><p id="bookmark-import-status">已檢查備份內容，請選擇匯入方式。</p><div class="bookmark-dialog-actions"><button class="bookmark-action" id="bookmark-import-cancel" type="button">取消</button><button class="bookmark-action" data-import-mode="merge" type="button">合併書籤</button><button class="bookmark-action bookmark-action-primary" data-import-mode="replace" type="button">取代現有書籤</button></div></dialog></section>`;
@@ -466,15 +284,14 @@ async function renderBookmarks() {
   deleteDialog.addEventListener('close', () => { pendingDeleteId = null; });
   document.querySelector('#bookmark-delete-confirm').addEventListener('click', async () => {
     if (!pendingDeleteId) return;
-    const bookmarks = readStored('bookmarks', []);
-    writeStored('bookmarks', bookmarks.filter((id) => id !== pendingDeleteId));
+    bookmarkService.remove(pendingDeleteId);
     deleteDialog.close();
     await renderBookmarks();
     document.querySelector('#bookmark-feedback').textContent = '書籤已刪除。';
   });
   document.querySelector('#bookmark-export').addEventListener('click', async () => {
     try {
-      await exportBookmarks();
+      await bookmarkService.exportBackup();
       feedback.textContent = '書籤備份已準備完成。';
     } catch {
       feedback.textContent = '匯出失敗，請稍後再試。';
@@ -489,15 +306,12 @@ async function renderBookmarks() {
     if (!file) return;
 
     try {
-      const data = JSON.parse(await readFileAsText(file));
-      if (data?.app !== 'twelve-baskets' || data.version !== 1 || !Array.isArray(data.bookmarks)) {
-        throw new Error('檔案格式不符，請選擇十二籃匯出的 JSON 備份。');
-      }
-      const importedIds = [...new Set(data.bookmarks.filter((id) => typeof id === 'string'))];
-      const volumes = await Promise.all(state.books.volumes.map(({ id }) => loadVolume(id)));
+      const data = JSON.parse(await bookmarkService.readFileAsText(file));
+      const books = await libraryData.loadBooks();
+      const volumes = await Promise.all(books.volumes.map(({ id }) => libraryData.loadVolume(id)));
       const validIds = new Set(volumes.flatMap((volume) => volume?.articles.map(({ id }) => id) || []));
-      const bookmarks = importedIds.filter((id) => validIds.has(id));
-      state.pendingBookmarkImport = { bookmarks, skipped: data.bookmarks.length - bookmarks.length };
+      state.pendingBookmarkImport = bookmarkService.parseImport(data, validIds);
+      const { bookmarks } = state.pendingBookmarkImport;
       document.querySelector('#bookmark-import-status').textContent = `找到 ${bookmarks.length} 筆有效書籤，${state.pendingBookmarkImport.skipped} 筆無法辨識。請選擇匯入方式。`;
       dialog.querySelectorAll('[data-import-mode]').forEach((button) => { button.disabled = bookmarks.length === 0; });
       dialog.showModal();
@@ -509,10 +323,7 @@ async function renderBookmarks() {
     button.addEventListener('click', async () => {
       const { bookmarks, skipped } = state.pendingBookmarkImport;
       const mode = button.dataset.importMode;
-      const current = readStored('bookmarks', []);
-      const updated = mode === 'replace' ? bookmarks : [...new Set([...current, ...bookmarks])];
-      const added = updated.length - (mode === 'replace' ? 0 : current.length);
-      writeStored('bookmarks', updated);
+      const { added } = bookmarkService.applyImport(bookmarks, mode);
       dialog.close();
       await renderBookmarks();
       document.querySelector('#bookmark-feedback').textContent = `已${mode === 'replace' ? '取代' : '合併'}書籤，新增 ${added} 筆，略過 ${skipped} 筆。`;
@@ -526,11 +337,11 @@ function renderNotReady(message) {
 }
 
 async function route() {
-  stopArticleSpeech();
+  articleSpeech.stop();
   const [, routeName, id] = location.hash.match(/^#\/(\w+)(?:\/([^/?#]+))?/) || [];
   try {
-    await loadBooks();
-    if (!routeName || routeName === 'home') renderHome();
+    await libraryData.loadBooks();
+    if (!routeName || routeName === 'home') await renderHome();
     else if (routeName === 'search') await renderSearch(decodeURIComponent(id || ''));
     else if (routeName === 'volume') await renderVolume(decodeURIComponent(id || ''));
     else if (routeName === 'article') await renderArticle(decodeURIComponent(id || ''));
@@ -552,56 +363,5 @@ if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 window.addEventListener('hashchange', route);
 window.addEventListener('scroll', revealReaderFloat, { passive: true });
 route();
-
-function registerServiceWorkerUpdates() {
-  if (!('serviceWorker' in navigator)) return;
-
-  const banner = document.querySelector('#update-banner');
-  const applyButton = document.querySelector('#update-apply');
-  const dismissButton = document.querySelector('#update-dismiss');
-  let waitingWorker = null;
-  let hadController = Boolean(navigator.serviceWorker.controller);
-  let updateAccepted = false;
-  let reloading = false;
-
-  const showUpdate = (worker) => {
-    waitingWorker = worker;
-    banner.hidden = false;
-  };
-
-  const observeInstallingWorker = (registration, worker) => {
-    if (!worker) return;
-    const checkState = () => {
-      if (worker.state === 'installed' && registration.active) showUpdate(worker);
-    };
-    worker.addEventListener('statechange', checkState);
-    checkState();
-  };
-
-  applyButton.addEventListener('click', () => {
-    updateAccepted = true;
-    waitingWorker?.postMessage({ type: 'SKIP_WAITING' });
-  });
-  dismissButton.addEventListener('click', () => { banner.hidden = true; });
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController && !updateAccepted) {
-      hadController = true;
-      return;
-    }
-    if (reloading) return;
-    reloading = true;
-    window.location.reload();
-  });
-
-  navigator.serviceWorker.register('./service-worker.js').then((registration) => {
-    if (registration.waiting && registration.active) showUpdate(registration.waiting);
-    observeInstallingWorker(registration, registration.installing);
-    registration.addEventListener('updatefound', () => observeInstallingWorker(registration, registration.installing));
-    registration.update().catch(() => {});
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') registration.update().catch(() => {});
-    });
-  }).catch(() => {});
-}
 
 window.addEventListener('load', registerServiceWorkerUpdates, { once: true });
