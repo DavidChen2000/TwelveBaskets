@@ -127,6 +127,8 @@ h1, h2, h3, p { margin-top: 0; }
 .article-header h1 { margin: 0 auto 17px; font: 600 34px/1.5 var(--kai-font); }
 .article-subtitle { color: var(--muted); font: 500 16px var(--kai-font); }
 .scripture { margin: 0 0 34px; padding: 15px 18px; border-left: 2px solid var(--coral); background: var(--surface); color: var(--muted); font: 500 16px/1.8 var(--kai-font); }
+.scripture a { color: inherit; text-decoration-color: var(--coral); text-underline-offset: 3px; }
+.scripture a:hover { color: var(--coral); }
 .article-body { font: 600 18px/2.05 var(--kai-font); }
 .article-body p { margin: 0 0 1.45em; text-indent: 2em; cursor: pointer; }
 .article-body p[data-speech-active='true'] { padding: 4px 10px; background: var(--surface); box-shadow: inset 3px 0 var(--green); }

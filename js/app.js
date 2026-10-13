@@ -3,6 +3,7 @@ import { registerServiceWorkerUpdates } from './service-worker-updates.js';
 import { createArticleSpeechController } from './article-speech.js';
 import { createBookmarkService } from './bookmark-service.js';
 import { createLibraryData } from './library-data.js';
+import { linkScripture } from './scripture-links.js';
 import { createStorage } from './storage.js';
 
 const app = document.querySelector('#app');
@@ -174,7 +175,7 @@ async function renderArticle(id, scrollToTop = false) {
       <button id="font-down" type="button" aria-label="縮小字體" title="縮小字體">A−</button><button id="font-up" type="button" aria-label="放大字體" title="放大字體">A+</button>
     </div></div>
     <header class="article-header"><div class="article-heading-meta"><p class="eyebrow">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</p><button id="share-article" class="article-share" type="button" aria-label="分享文章" title="分享文章"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.4"></path></svg><span>分享</span></button></div><h1>${esc(article.title)}</h1>${article.subtitle ? `<p class="article-subtitle">${esc(article.subtitle)}</p>` : ''}</header>
-    ${article.scripture ? `<p class="scripture">讀經：${esc(article.scripture)}</p>` : ''}
+    ${article.scripture ? `<p class="scripture">讀經：${linkScripture(article.scripture)}</p>` : ''}
     <span id="speech-status" class="visually-hidden" role="status" aria-live="polite"></span>
     <span id="share-status" class="visually-hidden" role="status" aria-live="polite"></span>
     <div class="article-body">${paragraphs}</div>
@@ -209,7 +210,7 @@ async function renderArticle(id, scrollToTop = false) {
   document.querySelector('#share-article').addEventListener('click', shareArticle);
   document.querySelector('#speech-toggle').addEventListener('click', articleSpeech.toggle);
   document.querySelectorAll('.article-body [data-speech-index]').forEach((paragraph) => {
-    paragraph.addEventListener('click', () => articleSpeech.startAt(Number(paragraph.dataset.speechIndex)));
+    paragraph.addEventListener('dblclick', () => articleSpeech.startAt(Number(paragraph.dataset.speechIndex)));
   });
   document.querySelector('#font-down').addEventListener('click', () => adjustFont(-1));
   document.querySelector('#font-up').addEventListener('click', () => adjustFont(1));
