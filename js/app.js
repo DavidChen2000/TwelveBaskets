@@ -88,7 +88,7 @@ async function renderSearch(query = '') {
       </form>
     </div>
     ${normalizedQuery ? (matches.length ? `<p class="search-summary">找到 ${matches.length} 篇文章</p>` : '<p class="search-status">找不到符合的文章，請換一個關鍵字再試一次。</p>') : '<p class="search-status">輸入關鍵字，搜尋文章標題、經文或內容。</p>'}
-    ${matches.length ? `<div class="article-list">${matches.map(({ volume, article, snippet, paragraphIndex }) => `<a class="search-result-card" href="#/article/${encodeURIComponent(article.id)}${paragraphIndex === null ? '' : `?paragraph=${paragraphIndex}`}"><span class="search-result-meta">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</span><strong>${esc(article.title)}</strong>${article.subtitle ? `<span class="search-result-meta">${esc(article.subtitle)}</span>` : ''}<span class="search-result-snippet">${esc(snippet || article.title)}</span></a>`).join('')}</div>` : ''}
+    ${matches.length ? `<div class="article-list">${matches.map(({ volume, article, snippet, paragraphIndex }) => `<a class="search-result-card" href="#/article/${encodeURIComponent(article.id)}?${paragraphIndex === null ? '' : `paragraph=${paragraphIndex}&`}find=${encodeURIComponent(query)}"><span class="search-result-meta">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</span><strong>${esc(article.title)}</strong>${article.subtitle ? `<span class="search-result-meta">${esc(article.subtitle)}</span>` : ''}<span class="search-result-snippet">${esc(snippet || article.title)}</span></a>`).join('')}</div>` : ''}
   </section>`;
   const form = document.querySelector('#search-form');
   const input = document.querySelector('#search-input');
@@ -153,7 +153,7 @@ function bindArticleSwipeNavigation(reader) {
   reader.addEventListener('touchcancel', () => { touchStart = null; }, { passive: true });
 }
 
-async function renderArticle(id, scrollToTop = false, targetParagraphIndex = null) {
+async function renderArticle(id, scrollToTop = false, targetParagraphIndex = null, initialSearchQuery = '') {
   const found = await libraryData.findArticle(id);
   if (!found) {
     renderNotReady('找不到這篇文章。');
@@ -191,7 +191,7 @@ async function renderArticle(id, scrollToTop = false, targetParagraphIndex = nul
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   bindArticleSwipeNavigation(readerShell);
-  bindArticleTextSearch(readerShell, article);
+  bindArticleTextSearch(readerShell, article, initialSearchQuery);
   // 點擊上一篇或下一篇時回到頂端；觸控滑動不設定此旗標。
   readerShell.querySelectorAll('.reader-pager .pager-link').forEach((link) => {
     link.addEventListener('click', () => { state.scrollArticleToTop = true; });
@@ -225,7 +225,7 @@ async function renderArticle(id, scrollToTop = false, targetParagraphIndex = nul
   applyFontSize();
 }
 
-function bindArticleTextSearch(readerShell, article) {
+function bindArticleTextSearch(readerShell, article, initialSearchQuery = '') {
   if (!window.matchMedia('(max-width: 760px) and (pointer: coarse)').matches) return;
 
   const articleBody = readerShell.querySelector('.article-body');
@@ -317,6 +317,12 @@ function bindArticleTextSearch(readerShell, article) {
       moveToMatch(event.shiftKey ? -1 : 1);
     }
   });
+
+  if (initialSearchQuery) {
+    searchBar.hidden = false;
+    searchInput.value = initialSearchQuery;
+    updateArticleHighlights();
+  }
 
   function updateArticleHighlights() {
     articleBody.querySelectorAll('p[data-speech-index]').forEach((paragraph) => {
@@ -500,9 +506,10 @@ async function route() {
     else if (routeName === 'search') await renderSearch(decodeURIComponent(id || ''));
     else if (routeName === 'volume') await renderVolume(decodeURIComponent(id || ''));
     else if (routeName === 'article') {
-      const paragraphValue = new URLSearchParams(location.hash.split('?')[1] || '').get('paragraph');
+      const articleParams = new URLSearchParams(location.hash.split('?')[1] || '');
+      const paragraphValue = articleParams.get('paragraph');
       const paragraphIndex = paragraphValue !== null && /^\d+$/.test(paragraphValue) ? Number(paragraphValue) : null;
-      await renderArticle(decodeURIComponent(id || ''), scrollArticleToTop, paragraphIndex);
+      await renderArticle(decodeURIComponent(id || ''), scrollArticleToTop, paragraphIndex, articleParams.get('find') || '');
     }
     else if (routeName === 'bookmarks') await renderBookmarks();
     else renderNotReady('此頁面尚未開放。');
