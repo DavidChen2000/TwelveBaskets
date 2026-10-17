@@ -518,7 +518,11 @@ async function route() {
     else if (routeName === 'volume') await renderVolume(decodeURIComponent(id || ''));
     else if (routeName === 'article') {
       const articleParams = new URLSearchParams(location.hash.split('?')[1] || '');
-      await renderArticle(decodeURIComponent(id || ''), scrollArticleToTop, articleParams.get('find') || '');
+      const articleSearchQuery = articleParams.get('find') || '';
+      if (articleSearchQuery) {
+        history.replaceState(history.state, '', `${location.pathname}${location.search}#/article/${id || ''}`);
+      }
+      await renderArticle(decodeURIComponent(id || ''), scrollArticleToTop, articleSearchQuery);
     }
     else if (routeName === 'bookmarks') await renderBookmarks();
     else renderNotReady('此頁面尚未開放。');

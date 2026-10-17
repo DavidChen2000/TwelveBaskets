@@ -180,7 +180,7 @@ h1, h2, h3, p { margin-top: 0; }
 @media (prefers-reduced-motion: reduce) { .reader-float { transition-duration: .01ms; } }
 
 @media (max-width: 760px) {
-  .topbar { height: 62px; gap: 22px; padding: 0 18px; }
+  .topbar { position: sticky; top: 0; z-index: 15; height: 62px; gap: 22px; padding: 0 18px; background: var(--paper); }
   .topnav { gap: 18px; }
   .wordmark { font-size: 23px; }
   .topnav a { font-size: 18px; }
