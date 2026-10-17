@@ -222,14 +222,16 @@ async function renderArticle(id, scrollToTop = false, initialSearchQuery = '') {
 }
 
 function bindArticleTextSearch(readerShell, article, initialSearchQuery = '') {
-  if (!window.matchMedia('(max-width: 760px) and (pointer: coarse)').matches) return;
-
+  const isMobile = window.matchMedia('(max-width: 760px) and (pointer: coarse)').matches;
   const articleBody = readerShell.querySelector('.article-body');
-  const menu = document.createElement('nav');
-  menu.className = 'reader-selection-menu';
-  menu.setAttribute('aria-label', '搜尋本文');
-  menu.innerHTML = '<button type="button" data-selection-action="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 5 5"></path></svg><span>搜尋</span></button>';
-  readerShell.append(menu);
+  let menu = null;
+  if (isMobile) {
+    menu = document.createElement('nav');
+    menu.className = 'reader-selection-menu';
+    menu.setAttribute('aria-label', '搜尋本文');
+    menu.innerHTML = '<button type="button" data-selection-action="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 5 5"></path></svg><span>搜尋</span></button>';
+    readerShell.append(menu);
+  }
 
   const searchBar = document.createElement('form');
   searchBar.className = 'reader-find-bar';
@@ -243,30 +245,39 @@ function bindArticleTextSearch(readerShell, article, initialSearchQuery = '') {
   const resultCount = searchBar.querySelector('.reader-find-count');
   let matches = [];
   let activeMatch = -1;
-  const dismissMenuOutside = (event) => {
-    if (!menu.contains(event.target)) menu.hidden = true;
+  const cleanupHandlers = [];
+  if (menu) {
+    const dismissMenuOutside = (event) => {
+      if (!menu.contains(event.target)) menu.hidden = true;
+    };
+    document.addEventListener('pointerdown', dismissMenuOutside);
+    cleanupHandlers.push(() => document.removeEventListener('pointerdown', dismissMenuOutside));
+
+    articleBody.addEventListener('contextmenu', (event) => {
+      menu.hidden = false;
+      const bounds = menu.getBoundingClientRect();
+      const left = Math.max(8, Math.min(event.clientX || innerWidth / 2, innerWidth - bounds.width - 8));
+      const top = Math.max(8, Math.min(event.clientY || innerHeight / 2, innerHeight - bounds.height - 8));
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+    });
+
+    menu.addEventListener('click', (event) => {
+      const action = event.target.closest('[data-selection-action]')?.dataset.selectionAction;
+      if (action !== 'search') return;
+      menu.hidden = true;
+      openArticleSearch();
+    });
+  }
+  const handleFindShortcut = (event) => {
+    if (isMobile || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'f') return;
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    event.preventDefault();
+    openArticleSearch();
   };
-  document.addEventListener('pointerdown', dismissMenuOutside);
-  articleTextSearchCleanup = () => document.removeEventListener('pointerdown', dismissMenuOutside);
-
-  articleBody.addEventListener('contextmenu', (event) => {
-    menu.hidden = false;
-    const bounds = menu.getBoundingClientRect();
-    const left = Math.max(8, Math.min(event.clientX || innerWidth / 2, innerWidth - bounds.width - 8));
-    const top = Math.max(8, Math.min(event.clientY || innerHeight / 2, innerHeight - bounds.height - 8));
-    menu.style.left = `${left}px`;
-    menu.style.top = `${top}px`;
-  });
-
-  menu.addEventListener('click', (event) => {
-    const action = event.target.closest('[data-selection-action]')?.dataset.selectionAction;
-    if (action !== 'search') return;
-    menu.hidden = true;
-    searchBar.hidden = false;
-    searchInput.value = '';
-    updateArticleHighlights();
-    searchInput.focus();
-  });
+  document.addEventListener('keydown', handleFindShortcut);
+  cleanupHandlers.push(() => document.removeEventListener('keydown', handleFindShortcut));
+  articleTextSearchCleanup = () => cleanupHandlers.forEach((cleanup) => cleanup());
 
   searchInput.addEventListener('input', updateArticleHighlights);
   searchBar.querySelectorAll('[data-find-direction]').forEach((button) => {
@@ -282,35 +293,65 @@ function bindArticleTextSearch(readerShell, article, initialSearchQuery = '') {
       moveToMatch(event.shiftKey ? -1 : 1);
     }
   });
-
   if (initialSearchQuery) {
+    openArticleSearch(initialSearchQuery);
+  }
+
+  function openArticleSearch(query = '') {
     searchBar.hidden = false;
-    searchInput.value = initialSearchQuery;
+    searchInput.value = query;
     updateArticleHighlights();
+    if (!query) searchInput.focus();
   }
 
   function updateArticleHighlights() {
     articleBody.querySelectorAll('p[data-speech-index]').forEach((paragraph) => {
-      paragraph.textContent = paragraph.textContent;
+      paragraph.textContent = article.paragraphs[Number(paragraph.dataset.speechIndex)];
     });
-    const query = searchInput.value;
-    if (query) {
-      const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const expression = new RegExp(escapedQuery, 'giu');
-      articleBody.querySelectorAll('p[data-speech-index]').forEach((paragraph) => {
-        const text = paragraph.textContent;
-        let lastIndex = 0;
-        const highlighted = text.replace(expression, (match, offset) => {
-          const before = esc(text.slice(lastIndex, offset));
-          lastIndex = offset + match.length;
-          return `${before}<mark class="reader-find-match">${esc(match)}</mark>`;
-        });
-        paragraph.innerHTML = `${highlighted}${esc(text.slice(lastIndex))}`;
-      });
-    }
+    const query = normalizeSearchText(searchInput.value);
+    if (query) articleBody.querySelectorAll('p[data-speech-index]').forEach((paragraph) => highlightParagraphMatches(paragraph, query));
     matches = [...articleBody.querySelectorAll('.reader-find-match')];
     activeMatch = matches.length ? 0 : -1;
     updateMatchState(true);
+  }
+
+  function highlightParagraphMatches(paragraph, query) {
+    const text = paragraph.textContent;
+    const rawStarts = [];
+    const rawEnds = [];
+    let normalizedText = '';
+    let rawOffset = 0;
+    for (const character of text) {
+      const normalizedCharacter = normalizeSearchText(character);
+      for (let index = 0; index < normalizedCharacter.length; index += 1) {
+        rawStarts.push(rawOffset);
+        rawEnds.push(rawOffset + character.length);
+      }
+      normalizedText += normalizedCharacter;
+      rawOffset += character.length;
+    }
+
+    const ranges = [];
+    let searchOffset = 0;
+    while (searchOffset <= normalizedText.length - query.length) {
+      const matchIndex = normalizedText.indexOf(query, searchOffset);
+      if (matchIndex < 0) break;
+      const start = rawStarts[matchIndex];
+      const end = rawEnds[matchIndex + query.length - 1];
+      const previousRange = ranges[ranges.length - 1];
+      if (previousRange && start <= previousRange.end) previousRange.end = Math.max(previousRange.end, end);
+      else ranges.push({ start, end });
+      searchOffset = matchIndex + query.length;
+    }
+
+    let lastIndex = 0;
+    const highlighted = ranges.map(({ start, end }) => {
+      const before = esc(text.slice(lastIndex, start));
+      const match = esc(text.slice(start, end));
+      lastIndex = end;
+      return `${before}<mark class="reader-find-match">${match}</mark>`;
+    }).join('');
+    if (ranges.length) paragraph.innerHTML = `${highlighted}${esc(text.slice(lastIndex))}`;
   }
 
   function moveToMatch(direction) {
@@ -323,7 +364,12 @@ function bindArticleTextSearch(readerShell, article, initialSearchQuery = '') {
     matches.forEach((match, index) => match.classList.toggle('is-current', index === activeMatch));
     resultCount.textContent = matches.length ? `${activeMatch + 1} of ${matches.length}` : '0 of 0';
     if (scrollToActive && activeMatch >= 0) {
-      matches[activeMatch].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const match = matches[activeMatch];
+        if (!match) return;
+        const top = window.scrollY + match.getBoundingClientRect().top - searchBar.offsetHeight - 16;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+      }));
     }
   }
 
