@@ -1,8 +1,9 @@
 // 封裝文章朗讀狀態、瀏覽器語音 API 與目前段落的提示狀態。
-export function createArticleSpeechController(getCurrentArticle) {
+export function createArticleSpeechController(getCurrentArticle, onStatusChange = () => {}) {
   let speechSession = { token: 0, chunks: [], index: 0, charIndex: 0, status: 'idle' };
 
   function updateSpeechButton() {
+    onStatusChange(speechSession.status);
     const toggle = document.querySelector('#speech-toggle');
     const toggleLabel = speechSession.status === 'speaking'
       ? '暫停朗讀'

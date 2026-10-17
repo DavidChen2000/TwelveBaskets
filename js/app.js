@@ -4,6 +4,7 @@ import { createArticleSpeechController } from './article-speech.js';
 import { createBookmarkService } from './bookmark-service.js';
 import { createLibraryData } from './library-data.js';
 import { linkScripture } from './scripture-links.js';
+import { createScreenWakeLock } from './screen-wake-lock.js';
 import { createStorage } from './storage.js';
 
 const app = document.querySelector('#app');
@@ -12,7 +13,16 @@ const isSafari = /Safari/i.test(userAgent) && !/(Chrome|Chromium|CriOS|Edg|EdgiO
 const readerFloatDuration = isSafari ? 2000 : 931;
 const state = { currentArticle: null, pendingBookmarkImport: null, scrollArticleToTop: false };
 const libraryData = createLibraryData();
-const articleSpeech = createArticleSpeechController(() => state.currentArticle?.article);
+const screenWakeLock = createScreenWakeLock({
+  onError: () => {
+    const status = document.querySelector('#wake-lock-status');
+    if (status) status.textContent = '無法保持螢幕開啟，請檢查瀏覽器設定。';
+  },
+});
+const articleSpeech = createArticleSpeechController(
+  () => state.currentArticle?.article,
+  (status) => screenWakeLock.setReading(status === 'speaking'),
+);
 let readerFloatTimer;
 let articleTextSearchCleanup;
 const { readStored, writeStored } = createStorage(localStorage);
@@ -177,6 +187,7 @@ async function renderArticle(id, scrollToTop = false, initialSearchQuery = '') {
     </div></div>
     <header class="article-header"><div class="article-heading-meta"><p class="eyebrow">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</p><button id="share-article" class="article-share" type="button" aria-label="分享文章" title="分享文章"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="m8.7 10.7 6.6-4.4m-6.6 7 6.6 4.4"></path></svg><span>分享</span></button></div><h1>${esc(article.title)}</h1>${article.subtitle ? `<p class="article-subtitle">${esc(article.subtitle)}</p>` : ''}</header>
     ${article.scripture ? `<p class="scripture">讀經：${linkScripture(article.scripture)}</p>` : ''}
+    <span id="wake-lock-status" class="visually-hidden" role="status" aria-live="polite"></span>
     <span id="speech-status" class="visually-hidden" role="status" aria-live="polite"></span>
     <span id="share-status" class="visually-hidden" role="status" aria-live="polite"></span>
     <div class="article-body">${paragraphs}</div>
