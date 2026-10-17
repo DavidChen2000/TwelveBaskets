@@ -46,7 +46,6 @@ export function findMatchingArticles({ query, volumes }) {
         article,
         score,
         snippet: buildSnippet(snippetSource, normalizedQuery),
-        paragraphIndex: paragraphIndex >= 0 ? paragraphIndex : null,
       };
     }).filter(Boolean);
   });

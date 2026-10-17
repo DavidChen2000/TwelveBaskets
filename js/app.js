@@ -88,7 +88,7 @@ async function renderSearch(query = '') {
       </form>
     </div>
     ${normalizedQuery ? (matches.length ? `<p class="search-summary">找到 ${matches.length} 篇文章</p>` : '<p class="search-status">找不到符合的文章，請換一個關鍵字再試一次。</p>') : '<p class="search-status">輸入關鍵字，搜尋文章標題、經文或內容。</p>'}
-    ${matches.length ? `<div class="article-list">${matches.map(({ volume, article, snippet, paragraphIndex }) => `<a class="search-result-card" href="#/article/${encodeURIComponent(article.id)}?${paragraphIndex === null ? '' : `paragraph=${paragraphIndex}&`}find=${encodeURIComponent(query)}"><span class="search-result-meta">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</span><strong>${esc(article.title)}</strong>${article.subtitle ? `<span class="search-result-meta">${esc(article.subtitle)}</span>` : ''}<span class="search-result-snippet">${esc(snippet || article.title)}</span></a>`).join('')}</div>` : ''}
+    ${matches.length ? `<div class="article-list">${matches.map(({ volume, article, snippet }) => `<a class="search-result-card" href="#/article/${encodeURIComponent(article.id)}?find=${encodeURIComponent(query)}"><span class="search-result-meta">${esc(volume.title)} · ${String(article.number).padStart(2, '0')}</span><strong>${esc(article.title)}</strong>${article.subtitle ? `<span class="search-result-meta">${esc(article.subtitle)}</span>` : ''}<span class="search-result-snippet">${esc(snippet || article.title)}</span></a>`).join('')}</div>` : ''}
   </section>`;
   const form = document.querySelector('#search-form');
   const input = document.querySelector('#search-input');
@@ -153,7 +153,7 @@ function bindArticleSwipeNavigation(reader) {
   reader.addEventListener('touchcancel', () => { touchStart = null; }, { passive: true });
 }
 
-async function renderArticle(id, scrollToTop = false, targetParagraphIndex = null, initialSearchQuery = '') {
+async function renderArticle(id, scrollToTop = false, initialSearchQuery = '') {
   const found = await libraryData.findArticle(id);
   if (!found) {
     renderNotReady('找不到這篇文章。');
@@ -183,11 +183,7 @@ async function renderArticle(id, scrollToTop = false, targetParagraphIndex = nul
     <nav class="reader-pager" aria-label="文章導覽">${previous ? `<a class="pager-link" href="#/article/${encodeURIComponent(previous.id)}"><span>上一篇</span><strong>← ${esc(previous.title)}</strong></a>` : '<span></span>'}<a class="pager-home" href="#/volume/${volume.id}" aria-label="回到${esc(volume.title)}篇目" title="回到${esc(volume.title)}篇目"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7M5.5 9v11h13V9M9 20v-6h6v6"/></svg></a>${next ? `<a class="pager-link pager-link-next" href="#/article/${encodeURIComponent(next.id)}"><span>下一篇</span><strong>${esc(next.title)} →</strong></a>` : '<span></span>'}</nav>
   </article>`;
   const readerShell = document.querySelector('.reader-shell');
-  if (Number.isInteger(targetParagraphIndex) && targetParagraphIndex >= 0 && targetParagraphIndex < article.paragraphs.length) {
-    const targetParagraph = readerShell.querySelector(`[data-speech-index="${targetParagraphIndex}"]`);
-    targetParagraph.dataset.searchTarget = 'true';
-    targetParagraph.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } else if (scrollToTop || targetParagraphIndex !== null) {
+  if (scrollToTop) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   bindArticleSwipeNavigation(readerShell);
@@ -231,8 +227,8 @@ function bindArticleTextSearch(readerShell, article, initialSearchQuery = '') {
   const articleBody = readerShell.querySelector('.article-body');
   const menu = document.createElement('nav');
   menu.className = 'reader-selection-menu';
-  menu.setAttribute('aria-label', '文字選取功能');
-  menu.innerHTML = '<button type="button" data-selection-action="select-all">全部選取</button><button type="button" data-selection-action="copy">複製</button><button type="button" data-selection-action="search">搜尋</button><span class="reader-selection-status" role="status"></span>';
+  menu.setAttribute('aria-label', '搜尋本文');
+  menu.innerHTML = '<button type="button" data-selection-action="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 5 5"></path></svg><span>搜尋</span></button>';
   readerShell.append(menu);
 
   const searchBar = document.createElement('form');
@@ -245,7 +241,6 @@ function bindArticleTextSearch(readerShell, article, initialSearchQuery = '') {
 
   const searchInput = searchBar.querySelector('input');
   const resultCount = searchBar.querySelector('.reader-find-count');
-  const selectionStatus = menu.querySelector('.reader-selection-status');
   let matches = [];
   let activeMatch = -1;
   const dismissMenuOutside = (event) => {
@@ -255,8 +250,6 @@ function bindArticleTextSearch(readerShell, article, initialSearchQuery = '') {
   articleTextSearchCleanup = () => document.removeEventListener('pointerdown', dismissMenuOutside);
 
   articleBody.addEventListener('contextmenu', (event) => {
-    event.preventDefault();
-    selectionStatus.textContent = '';
     menu.hidden = false;
     const bounds = menu.getBoundingClientRect();
     const left = Math.max(8, Math.min(event.clientX || innerWidth / 2, innerWidth - bounds.width - 8));
@@ -265,42 +258,14 @@ function bindArticleTextSearch(readerShell, article, initialSearchQuery = '') {
     menu.style.top = `${top}px`;
   });
 
-  menu.addEventListener('pointerdown', (event) => event.preventDefault());
-  menu.addEventListener('click', async (event) => {
+  menu.addEventListener('click', (event) => {
     const action = event.target.closest('[data-selection-action]')?.dataset.selectionAction;
-    if (!action) return;
-
-    if (action === 'select-all') {
-      const range = document.createRange();
-      range.selectNodeContents(articleBody);
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-      selectionStatus.textContent = '已選取全文。';
-      return;
-    }
-
-    if (action === 'search') {
-      menu.hidden = true;
-      searchBar.hidden = false;
-      searchInput.value = '';
-      updateArticleHighlights();
-      searchInput.focus();
-      return;
-    }
-
-    const selectedText = window.getSelection()?.toString() || '';
-    if (!selectedText) {
-      selectionStatus.textContent = '請先選取要複製的文字。';
-      return;
-    }
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('剪貼簿 API 無法使用');
-      await navigator.clipboard.writeText(selectedText);
-      menu.hidden = true;
-    } catch (error) {
-      selectionStatus.textContent = `複製失敗：${error.message}`;
-    }
+    if (action !== 'search') return;
+    menu.hidden = true;
+    searchBar.hidden = false;
+    searchInput.value = '';
+    updateArticleHighlights();
+    searchInput.focus();
   });
 
   searchInput.addEventListener('input', updateArticleHighlights);
@@ -507,9 +472,7 @@ async function route() {
     else if (routeName === 'volume') await renderVolume(decodeURIComponent(id || ''));
     else if (routeName === 'article') {
       const articleParams = new URLSearchParams(location.hash.split('?')[1] || '');
-      const paragraphValue = articleParams.get('paragraph');
-      const paragraphIndex = paragraphValue !== null && /^\d+$/.test(paragraphValue) ? Number(paragraphValue) : null;
-      await renderArticle(decodeURIComponent(id || ''), scrollArticleToTop, paragraphIndex, articleParams.get('find') || '');
+      await renderArticle(decodeURIComponent(id || ''), scrollArticleToTop, articleParams.get('find') || '');
     }
     else if (routeName === 'bookmarks') await renderBookmarks();
     else renderNotReady('此頁面尚未開放。');
