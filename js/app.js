@@ -157,7 +157,9 @@ function bindArticleSwipeNavigation(reader) {
 
     const link = reader.querySelector(deltaX < 0 ? '.pager-link-next' : '.pager-link:not(.pager-link-next)');
     if (!link) return;
-    event.preventDefault();
+    if (event.cancelable) {
+      event.preventDefault();
+    }
     location.hash = link.getAttribute('href').slice(1);
   }, { passive: false });
   reader.addEventListener('touchcancel', () => { touchStart = null; }, { passive: true });
