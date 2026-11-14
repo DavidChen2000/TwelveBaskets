@@ -82,7 +82,7 @@ export function createArticleSpeechController(getCurrentArticle, onStatusChange 
     paragraph.setAttribute('data-speech-active', 'true');
     paragraph.scrollIntoView({
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'center',
+      block: 'start',
     });
   }
 

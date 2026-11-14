@@ -49,9 +49,9 @@ test('朗讀進入新段落時會捲動至該段，並尊重減少動態效果�
 
   controller.startAt(0);
   assert.equal(status.textContent, '正在從第 1 段開始朗讀。');
-  assert.deepEqual(paragraphs[0].scrollOptions, { behavior: 'smooth', block: 'center' });
+  assert.deepEqual(paragraphs[0].scrollOptions, { behavior: 'smooth', block: 'start' });
 
   prefersReducedMotion = true;
   utterance.onend();
-  assert.deepEqual(paragraphs[1].scrollOptions, { behavior: 'auto', block: 'center' });
+  assert.deepEqual(paragraphs[1].scrollOptions, { behavior: 'auto', block: 'start' });
 });
