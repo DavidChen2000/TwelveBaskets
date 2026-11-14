@@ -77,7 +77,13 @@ export function createArticleSpeechController(getCurrentArticle, onStatusChange 
 
   function setActiveParagraph(index) {
     document.querySelectorAll('.article-body [data-speech-active]').forEach((paragraph) => paragraph.removeAttribute('data-speech-active'));
-    document.querySelector(`.article-body [data-speech-index="${index}"]`)?.setAttribute('data-speech-active', 'true');
+    const paragraph = document.querySelector(`.article-body [data-speech-index="${index}"]`);
+    if (!paragraph) return;
+    paragraph.setAttribute('data-speech-active', 'true');
+    paragraph.scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'center',
+    });
   }
 
   function speakNextChunk(token) {
